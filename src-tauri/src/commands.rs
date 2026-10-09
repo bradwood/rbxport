@@ -2957,7 +2957,14 @@ pub async fn create_playlist<R: tauri::Runtime>(
     name: String,
     parent: String,
 ) -> AppResult<u32> {
-    edit(app, state, "create_playlist", Touched::Playlists, move |w| w.create_playlist(&name, &parent).map(|_| ())).await
+    edit(app, state, "create_playlist", Touched::Playlists, move |w| {
+        let id = w.create_playlist(&name, &parent)?;
+        if index.is_some() {
+            w.move_to(&id, &parent, index)?;
+        }
+        Ok(())
+    })
+    .await
 }
 
 /// An intelligent playlist's rule, for the editor. Refused when the rule
@@ -2984,6 +2991,7 @@ fn rule_to_dto(rule: &rbl_index::SmartRule) -> AppResult<SmartRuleDto> {
     use rbl_index::smart::{Item, Logic};
     let mut conditions = Vec::with_capacity(rule.root.items.len());
     for item in &rule.root.items {
+    index: Option<usize>,
         match item {
             Item::Condition(c) => conditions.push(SmartConditionDto {
                 property: c.property.name().to_owned(),

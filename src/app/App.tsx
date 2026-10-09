@@ -1227,11 +1227,13 @@ function AppBody() {
 
   const createPlaylistIn = useCallback(
     (node: TreeNode) => {
-      // rekordbox's own default name, from german.lang, and the node the menu
-      // was opened on says where — a folder holds it, a playlist's own
-      // folder does, and one at the top goes at the top.
+      // rekordbox's own default name, from german.lang. It goes where the menu
+      // was opened: first inside a folder, directly below a playlist.
+      const parent = parentFor(tree, node);
+      const index =
+        node.kind === "folder" ? 0 : childrenOf(tree, parent).findIndex((n) => n.id === node.id) + 1;
       write(async (backend) => {
-        await backend.edits.createPlaylist("New playlist", parentFor(tree, node));
+        await backend.edits.createPlaylist("New playlist", parent, index);
         return "Created New playlist.";
       });
     },

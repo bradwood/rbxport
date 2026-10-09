@@ -638,9 +638,12 @@ export function createMockBackend(options: MockOptions = {}): Backend {
    * parent, or last among the top-level playlists — before the Histories,
    * whose collapsed heading would otherwise hide anything appended after it.
    */
-  const insertUnder = (parent: string, node: TreeNode) => {
+  const insertUnder = (parent: string, node: TreeNode, index?: number) => {
     let at: number;
-    if (parent === TREE_ROOT) {
+    const before = index === undefined ? undefined : childrenOf(parent)[index];
+    if (before !== undefined) {
+      at = tree.findIndex((n) => n.id === before.id);
+    } else if (parent === TREE_ROOT) {
       at = tree.findIndex((n) => n.depth === 0 && n.id !== "all" && n.id !== "playlists");
     } else {
       const start = tree.findIndex((n) => n.id === parent);
@@ -892,11 +895,11 @@ export function createMockBackend(options: MockOptions = {}): Backend {
   };
 
   const edits: Edits = {
-    createPlaylist: (name, parent) => {
+    createPlaylist: (name, parent, index) => {
       const depth = parent === TREE_ROOT ? 1 : (findNode(parent)?.depth ?? 0) + 1;
       const id = `made-${nextId++}`;
       membership.set(id, []);
-      insertUnder(parent, { id, name, kind: "playlist", depth, childCount: 0 });
+      insertUnder(parent, { id, name, kind: "playlist", depth, childCount: 0 }, index);
       return bump();
     },
     createFolder: (name, parent) => {

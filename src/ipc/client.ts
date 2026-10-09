@@ -542,7 +542,7 @@ async function realBackend(): Promise<Backend> {
     onTagListChanged: (listener) => subscribe("tag-list:changed", () => listener()),
     onEditHistory: (listener) => subscribe<EditHistoryState>("edit-history:changed", listener),
     edits: {
-      createPlaylist: (name, parent) => invoke<number>("create_playlist", { name, parent }),
+      createPlaylist: (name, parent, index) => invoke<number>("create_playlist", { name, parent, index }),
       createSmartPlaylist: (name, parent, rule) => invoke<number>("create_smart_playlist", { name, parent, rule }),
       setSmartRule: (playlist, rule) => invoke<number>("set_smart_rule", { playlist, rule }),
       createFolder: (name, parent) => invoke<number>("create_folder", { name, parent }),

@@ -1628,7 +1628,8 @@ export interface EditHistoryState {
 }
 
 export interface Edits {
-  createPlaylist(name: string, parent: string): Promise<number>;
+  /** `index` is the place among `parent`'s children; omitted, it goes last. */
+  createPlaylist(name: string, parent: string, index?: number): Promise<number>;
   /** Create New Intelligent Playlist: a rule under `parent`. */
   createSmartPlaylist(name: string, parent: string, rule: SmartRule): Promise<number>;
   /** Replaces an intelligent playlist's rule. */

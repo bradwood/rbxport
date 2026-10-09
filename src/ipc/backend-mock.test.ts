@@ -43,6 +43,18 @@ describe("mock edits", () => {
     expect(after).toHaveLength(before.length - 1);
   });
 
+  it("creates a playlist at the given place among its siblings", async () => {
+    const backend = createMockBackend({ trackCount: 20 });
+    await backend.edits.createFolder("Sets", TREE_ROOT);
+    const folder = (await backend.playlistTree()).find((n) => n.name === "Sets")!;
+    await backend.edits.createPlaylist("A", folder.id);
+    await backend.edits.createPlaylist("B", folder.id);
+    await backend.edits.createPlaylist("First", folder.id, 0);
+    await backend.edits.createPlaylist("Middle", folder.id, 2);
+    const names = (await backend.playlistTree()).filter((n) => n.depth === folder.depth + 1 && ["A", "B", "First", "Middle"].includes(n.name)).map((n) => n.name);
+    expect(names).toEqual(["First", "A", "Middle", "B"]);
+  });
+
   it("undoes and redoes a folder deletion with its subtree", async () => {
     const backend = createMockBackend({ trackCount: 20 });
     await backend.edits.createFolder("Sets", TREE_ROOT);

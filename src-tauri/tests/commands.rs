@@ -240,11 +240,11 @@ fn a_playlist_folder_lists_unique_tracks_from_nested_playlists() {
     let s = shell();
     run(commands::create_folder(s.handle(), s.state(), "Shows".into(), ROOT.into())).unwrap();
     let shows = s.node("Shows");
-    run(commands::create_playlist(s.handle(), s.state(), "Friday".into(), shows.id.clone())).unwrap();
+    run(commands::create_playlist(s.handle(), s.state(), "Friday".into(), shows.id.clone(), None)).unwrap();
     run(commands::create_folder(s.handle(), s.state(), "Weekend".into(), shows.id.clone())).unwrap();
     let weekend = s.node("Weekend");
-    run(commands::create_playlist(s.handle(), s.state(), "Saturday".into(), weekend.id.clone())).unwrap();
-    run(commands::create_playlist(s.handle(), s.state(), "Outside".into(), ROOT.into())).unwrap();
+    run(commands::create_playlist(s.handle(), s.state(), "Saturday".into(), weekend.id.clone(), None)).unwrap();
+    run(commands::create_playlist(s.handle(), s.state(), "Outside".into(), ROOT.into(), None)).unwrap();
     let friday = s.node("Friday");
     let saturday = s.node("Saturday");
     let outside = s.node("Outside");
@@ -433,7 +433,7 @@ fn a_playlist_is_made_filled_reordered_renamed_moved_and_deleted() {
     let gigs = s.node("Gigs");
     assert_eq!(gigs.depth, 1);
     assert_eq!((gigs.kind, gigs.child_count), ("folder", Some(0)), "a folder before anything is in it");
-    run(commands::create_playlist(s.handle(), s.state(), "Friday".into(), gigs.id.clone())).unwrap();
+    run(commands::create_playlist(s.handle(), s.state(), "Friday".into(), gigs.id.clone(), None)).unwrap();
     let friday = s.node("Friday");
     assert_eq!(friday.depth, 2, "inside the folder");
     assert_eq!(friday.kind, "playlist");
@@ -506,7 +506,7 @@ fn a_deleted_playlist_tree_can_be_undone_and_redone() {
     let s = shell();
     run(commands::create_folder(s.handle(), s.state(), "Sets".into(), ROOT.into())).unwrap();
     let folder = s.node("Sets");
-    run(commands::create_playlist(s.handle(), s.state(), "Friday".into(), folder.id.clone())).unwrap();
+    run(commands::create_playlist(s.handle(), s.state(), "Friday".into(), folder.id.clone(), None)).unwrap();
     let playlist = s.node("Friday");
     let tracks = vec![track_id(0), track_id(1)];
     run(commands::add_tracks_to_playlist(
@@ -541,7 +541,7 @@ fn library_history_names_and_reverses_each_supported_edit() {
     let s = shell();
     run(commands::create_folder(s.handle(), s.state(), "Sets".into(), ROOT.into())).unwrap();
     let folder = s.node("Sets");
-    run(commands::create_playlist(s.handle(), s.state(), "Friday".into(), ROOT.into())).unwrap();
+    run(commands::create_playlist(s.handle(), s.state(), "Friday".into(), ROOT.into(), None)).unwrap();
     let playlist = s.node("Friday");
 
     let renamed = run(commands::rename_playlist(
@@ -611,7 +611,7 @@ fn removing_from_collection_is_permanent_and_clears_history() {
 #[test]
 fn removing_several_tracks_from_the_collection_removes_every_one() {
     let s = shell();
-    run(commands::create_playlist(s.handle(), s.state(), "Set".into(), ROOT.into())).unwrap();
+    run(commands::create_playlist(s.handle(), s.state(), "Set".into(), ROOT.into(), None)).unwrap();
     let playlist = s.node("Set").id;
     let members = vec![track_id(1), track_id(2), track_id(3), track_id(4)];
     run(commands::add_tracks_to_playlist(s.handle(), s.state(), playlist.clone(), members.clone())).unwrap();
@@ -643,7 +643,7 @@ fn every_edit_bumps_the_generation_and_tells_the_interface() {
     let s = shell();
     let (_, _, _, start) = s.state().summary();
 
-    let first = run(commands::create_playlist(s.handle(), s.state(), "One".into(), ROOT.into())).unwrap();
+    let first = run(commands::create_playlist(s.handle(), s.state(), "One".into(), ROOT.into(), None)).unwrap();
     let second = run(commands::set_track_rating(s.handle(), s.state(), vec![track_id(0)], 3)).unwrap();
     assert!(first > start);
     assert!(second.generation > first);
@@ -669,7 +669,7 @@ fn library_backups_are_manual_only() {
 
     // Every kind of edit opens its own writer; none should copy the database.
     run(commands::set_track_comment(s.handle(), s.state(), vec![track_id(0)], "x".into())).unwrap();
-    run(commands::create_playlist(s.handle(), s.state(), "Later".into(), ROOT.into())).unwrap();
+    run(commands::create_playlist(s.handle(), s.state(), "Later".into(), ROOT.into(), None)).unwrap();
     run(cues::add_cue(s.handle(), s.state(), track_id(0), CueKind::Memory, 1_000)).unwrap();
     run(details::set_track_field(s.handle(), s.state(), vec![track_id(0)], "title".into(), "T".into())).unwrap();
     assert!(!backups.exists(), "edits must not back up automatically");
@@ -699,7 +699,7 @@ fn a_write_the_library_refuses_is_read_only_to_the_interface_and_changes_nothing
     let s = shell();
     let (_, _, _, generation) = s.state().summary();
 
-    let err = run(commands::create_playlist(s.handle(), s.state(), "Orphan".into(), "no-such-folder".into()))
+    let err = run(commands::create_playlist(s.handle(), s.state(), "Orphan".into(), "no-such-folder".into(), None))
         .unwrap_err();
     assert_eq!(err.kind, ErrorKind::ReadOnly, "the status bar shows a refusal, not a crash");
     assert!(!s.has_node("Orphan"));
@@ -1772,7 +1772,7 @@ fn exporting_a_folder_writes_the_folder_with_its_playlists_inside() {
 
     run(commands::create_folder(s.handle(), s.state(), "Set".into(), ROOT.into())).unwrap();
     let set = s.node("Set");
-    run(commands::create_playlist(s.handle(), s.state(), "Inside".into(), set.id.clone())).unwrap();
+    run(commands::create_playlist(s.handle(), s.state(), "Inside".into(), set.id.clone(), None)).unwrap();
     run(commands::add_tracks_to_playlist(s.handle(), s.state(), s.node("Inside").id, vec![song])).unwrap();
     run(commands::create_folder(s.handle(), s.state(), "Later".into(), set.id.clone())).unwrap();
     let rule = SmartRuleDto {

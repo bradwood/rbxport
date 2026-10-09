@@ -85,10 +85,6 @@ export function AnalysisDialog({ count, auto = false, initialMode, initialFirstB
                 ))}
               </select>
             </label>
-            <label className={styles.check}>
-              <input type="checkbox" checked={settings.firstBeatCue} onChange={event => update({ firstBeatCue: event.target.checked })} />
-              {t("Add memory cue at first beat")}
-            </label>
           </fieldset>
           <label className={styles.check}>
             <input type="checkbox" checked={settings.key} onChange={event => update({ key: event.target.checked })} />

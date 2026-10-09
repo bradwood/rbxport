@@ -30,12 +30,14 @@ export function AnalysisPane(_: { tab: AnalysisTab }) {
           onChange={value => update("analysis", { concurrentTracks: Number(value) })} />
         <p>Lower this if analysis affects playback. More tracks at once uses more processing power.</p>
       </div>
-      <div className={styles.analysisAuto}>
+      <div className={styles.analysisSwitch}>
         <Toggle label="Automatic analysis" checked={auto} onChange={(enabled) => update("analysis", { auto: enabled })} />
+        <p>Analyse tracks as soon as they are imported into the collection.</p>
       </div>
-      <div className={styles.analysisAuto}>
+      <div className={styles.analysisSwitch}>
         <Toggle label="Add memory cue at first beat" checked={preferences.analysis.firstBeatCue}
           onChange={(firstBeatCue) => update("analysis", { firstBeatCue })} />
+        <p>Adds a memory cue on the first beat of the beat grid, unless the track already has one there.</p>
       </div>
     </Section>
   );

@@ -730,7 +730,10 @@ button.keyBadge:hover { background: var(--c-button-hover, var(--c-raised)); }
 .analysisField .selectLabel { width: auto; font-weight: 700; }
 .analysisField .select { width: 100%; max-width: 420px; min-height: 32px; }
 .analysisField p { max-width: 480px; margin: 10px 0 0; color: var(--c-text-dim); font-size: var(--f-size-sm); line-height: 1.5; }
-.analysisAuto .row { margin: 0; }
+.analysisSwitch { padding: 0 0 20px; margin-bottom: 20px; border-bottom: 1px solid var(--c-raised); }
+.analysisSwitch:last-child { padding-bottom: 0; margin-bottom: 0; border-bottom: 0; }
+.analysisSwitch .row { margin: 0; font-weight: 700; }
+.analysisSwitch p { max-width: 480px; margin: 6px 0 0 calc(var(--s-pref-toggle-w) + 5.5px); color: var(--c-text-dim); font-size: var(--f-size-sm); line-height: 1.5; font-weight: 400; }
 
 /* About keeps update settings aligned with its version and description. */
 .updateControls { display: flex; align-items: center; flex-wrap: wrap; gap: 16px; }

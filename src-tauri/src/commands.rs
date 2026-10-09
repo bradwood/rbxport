@@ -1868,6 +1868,13 @@ fn read_analysis(share: &std::path::Path, relative: &str) -> AppResult<Vec<(Stri
                 out.push((extension.to_owned(), bytes));
             }
             Err(e) if e.kind()==std::io::ErrorKind::NotFound && extension!="DAT" => {},
+            // The library names an analysis folder that is not on disk: the
+            // track is exported without its analysis, as one the library
+            // never analysed is, instead of failing the whole export.
+            Err(e) if e.kind()==std::io::ErrorKind::NotFound => {
+                tracing::warn!(path = %path.display(), "analysis file is missing; exporting the track without it");
+                return Ok(Vec::new());
+            }
             Err(e) => return Err(AppError::internal(format!("Cannot read analysis {}: {e}",path.display()))),
         }
     }
@@ -3934,7 +3941,15 @@ pub async fn filter_values(
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
-    use super::expand_import_paths;
+    use super::{expand_import_paths, read_analysis};
+
+    /// A track whose analysis folder is gone from disk is exported without
+    /// analysis; it does not stop the export of everything else.
+    #[test]
+    fn a_missing_analysis_file_does_not_fail_the_export() {
+        let share = tempfile::tempdir().unwrap();
+        assert!(read_analysis(share.path(), "/PIONEER/USBANLZ/ca6/gone/ANLZ0000.DAT").unwrap().is_empty());
+    }
 
     /// An edit made with three tracks selected writes all three, and one
     /// undo takes all three back: it is one step of history, as it is one

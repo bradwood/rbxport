@@ -11,9 +11,8 @@ use std::{io, path::Path};
 pub enum Layout {
     /// One FAT32 partition: readable on macOS, Windows, Linux and CDJs.
     Fat32,
-    /// A FAT32 partition for players and PCs, then a Mac OS Extended
-    /// (Journaled) partition for Macs. Each takes half of the stick.
-    Fat32AndHfsPlus,
+    /// One Mac OS Extended (Journaled) partition: readable on macOS only.
+    HfsPlus,
 }
 
 /// Erases the stick mounted at `path` and formats it as `layout`, keeping the
@@ -67,11 +66,9 @@ fn diskutil_arguments(disk: &str, layout: Layout, name: &str) -> Vec<String> {
         Layout::Fat32 => ["eraseDisk", "FAT32", &fat, "MBRFormat", &device]
             .map(str::to_owned)
             .to_vec(),
-        Layout::Fat32AndHfsPlus => [
-            "partitionDisk", &device, "MBR", "FAT32", &fat, "50%", "JHFS+", &hfs, "R",
-        ]
-        .map(str::to_owned)
-        .to_vec(),
+        Layout::HfsPlus => ["eraseDisk", "JHFS+", &hfs, "GPT", &device]
+            .map(str::to_owned)
+            .to_vec(),
     }
 }
 
@@ -160,10 +157,10 @@ mod tests {
     }
 
     #[test]
-    fn fat32_and_hfs_plus_split_the_disk_in_two() {
+    fn hfs_plus_takes_the_whole_disk_under_the_same_name() {
         assert_eq!(
-            diskutil_arguments("disk5", Layout::Fat32AndHfsPlus, "DJ: Stick"),
-            ["partitionDisk", "/dev/disk5", "MBR", "FAT32", "DJ STICK", "50%", "JHFS+", "DJ- Stick", "R"],
+            diskutil_arguments("disk5", Layout::HfsPlus, "DJ: Stick"),
+            ["eraseDisk", "JHFS+", "DJ- Stick", "GPT", "/dev/disk5"],
         );
     }
 

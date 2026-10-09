@@ -252,6 +252,7 @@
   padding: 4px 12px 8px 30px;
   font-size: var(--f-size-pref-small);
 }
+.formatButton { margin: 8px 0 4px 12px; }
 .libraryNote { padding-left: 12px; color: var(--c-text-dim); line-height: 20px; }
 .capacity { margin-top: 4px; color: var(--c-text-dim); }
 

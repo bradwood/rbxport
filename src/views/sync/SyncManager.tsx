@@ -16,7 +16,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, ArrowRight, LoaderCircle, Search, X } from "lucide-react";
 
-import { ContextMenu } from "@/components/ContextMenu";
 import { EjectIcon, FolderIcon, ListIcon, SmartListIcon } from "@/components/icons";
 import { getBackend } from "@/ipc/client";
 import type { Device, DeviceSyncState, ExportReport, FormatLayout, ItunesLibrary, TreeNode } from "@/ipc/types";
@@ -143,7 +142,6 @@ export function SyncManager({ windowed = false, onClose, onSynced, onReady }: Sy
   const [itunesLoading, setItunesLoading] = useState(true);
   const [itunesError, setItunesError] = useState("");
   const [ejectingPath, setEjectingPath] = useState<string | null>(null);
-  const [deviceMenu, setDeviceMenu] = useState<{ device: Device; x: number; y: number } | null>(null);
   const [formatTarget, setFormatTarget] = useState<Device | null>(null);
   const busy = operation !== null || [...exportJobs.values()].some(job => ["preparing", "checking", "copying", "database", "verifying", "publishing", "ejecting"].includes(job.state));
   const [ejectAfterSync, setEjectAfterSync] = useState(false);
@@ -889,10 +887,7 @@ export function SyncManager({ windowed = false, onClose, onSynced, onReady }: Sy
               const usedPercent = freePercent === null ? null : 100 - freePercent;
               const used = device.totalBytes > 0 ? formatSpace(Math.max(0, device.totalBytes - device.freeBytes)) || "0.0 GB" : "";
               return <div key={device.path} className={styles.device} role="treeitem" aria-expanded={expanded} data-ticked={on || undefined}>
-                <div className={styles.row} onContextMenu={canFormat ? (event) => {
-                  event.preventDefault();
-                  if (!busy && !loadingDevices) setDeviceMenu({ device, x: event.clientX, y: event.clientY });
-                } : undefined}>
+                <div className={styles.row}>
                   <button type="button" className={styles.twisty} data-open={expanded ? "" : undefined}
                     aria-label={`${expanded ? "Collapse" : "Expand"} ${device.name}`} disabled={busy} onClick={() => {
                       setExpandedDevices(current => toggle(current, device.path));
@@ -943,6 +938,8 @@ export function SyncManager({ windowed = false, onClose, onSynced, onReady }: Sy
                 {expanded ? <div className={styles.library} role="group" aria-label={`${device.name} library`}>
                   {deviceErrors.has(device.path) ? <p role="alert">{deviceErrors.get(device.path)}</p> : read === undefined ? <div className={styles.libraryNote}>Reading…</div>
                     : <DeviceLibraries libraries={read.libraries ?? [{ name: "Device Library", nodes: read.onDevice.map((name, i) => ({ id: String(i+1), parentId: "0", name, folder: false })) }]} />}
+                  {canFormat ? <button type="button" className={`${styles.button} ${styles.formatButton}`} disabled={busy}
+                    onClick={() => setFormatTarget(device)}>{t("Format USB…")}</button> : null}
                 </div> : null}
               </div>;
             })}
@@ -971,15 +968,6 @@ export function SyncManager({ windowed = false, onClose, onSynced, onReady }: Sy
   );
 
   const dialogs = <>
-    {deviceMenu ? <ContextMenu
-      x={deviceMenu.x}
-      y={deviceMenu.y}
-      rows={[{ label: t("Format USB…"), action: "format" }]}
-      context={{ inPlaylist: false, hasFile: false, readOnly: false }}
-      label={deviceMenu.device.name}
-      onChoose={() => setFormatTarget(deviceMenu.device)}
-      onClose={() => setDeviceMenu(null)}
-    /> : null}
     {formatTarget ? <FormatDeviceDialog
       device={formatTarget}
       onFormat={layout => formatDevice(formatTarget, layout)}

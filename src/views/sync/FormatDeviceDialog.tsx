@@ -49,19 +49,19 @@ export function FormatDeviceDialog({ device, onFormat, onClose }: {
             <input type="radio" name="format-layout" checked={layout === "fat32"} onChange={() => setLayout("fat32")} />
             <span>
               <strong>{t("FAT32")}</strong>
-              <span className={styles.hint}>{t("Works on Mac, Windows, Linux and CDJs.")}</span>
+              <span className={styles.hint}>{t("Compatible with CDJ, Windows, Mac.")}</span>
             </span>
           </label>
           <label className={styles.option}>
-            <input type="radio" name="format-layout" checked={layout === "fat32AndHfsPlus"} onChange={() => setLayout("fat32AndHfsPlus")} />
+            <input type="radio" name="format-layout" checked={layout === "hfsPlus"} onChange={() => setLayout("hfsPlus")} />
             <span>
-              <strong>{t("FAT32 and HFS+")}</strong>
-              <span className={styles.hint}>{t("Two partitions of equal size: FAT32 for players and PCs, HFS+ for Mac.")}</span>
+              <strong>{t("HFS+")}</strong>
+              <span className={styles.hint}>{t("Compatible with CDJ, Mac.")}</span>
             </span>
           </label>
         </fieldset>
         <p id="format-device-warning" className={styles.warning} role="alert">
-          {t("The whole USB stick will be completely erased, including all of its partitions. Everything on it will be lost. This cannot be undone.")}
+          {t("ALL DATA WILL BE ERASED")}
         </p>
         {error ? <p className={styles.error} role="alert">{error}</p> : null}
         <div className={styles.buttons}>

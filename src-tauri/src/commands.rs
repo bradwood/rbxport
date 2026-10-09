@@ -1622,7 +1622,7 @@ pub async fn eject_device(path: String) -> AppResult<()> {
 #[serde(rename_all = "camelCase")]
 pub enum FormatLayout {
     Fat32,
-    Fat32AndHfsPlus,
+    HfsPlus,
 }
 
 /// Erases every partition on the stick at `path` and formats it, keeping its name.
@@ -1636,7 +1636,7 @@ pub async fn format_device(path: String, layout: FormatLayout) -> AppResult<()> 
         }
         let layout = match layout {
             FormatLayout::Fat32 => rbl_devices::format::Layout::Fat32,
-            FormatLayout::Fat32AndHfsPlus => rbl_devices::format::Layout::Fat32AndHfsPlus,
+            FormatLayout::HfsPlus => rbl_devices::format::Layout::HfsPlus,
         };
         let result = rbl_devices::format::format(std::path::Path::new(&path), layout)
             .map_err(|e| AppError::internal(e.to_string()));

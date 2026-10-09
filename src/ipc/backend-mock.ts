@@ -2083,6 +2083,16 @@ export function createMockBackend(options: MockOptions = {}): Backend {
       devices.splice(index, 1);
       await wait(undefined);
     },
+    formatDevice: async (path, layout) => {
+      const device = devices.find(d => d.path === path);
+      if (!device) throw new Error("That device is no longer connected.");
+      formattedAs.set(path, layout === "fat32" ? "FAT32" : "HFS+");
+      device.freeBytes = device.totalBytes;
+      device.export = null;
+      deviceLibraries.delete(path);
+      syncSelections.delete(path);
+      await wait(undefined);
+    },
     deviceSyncState: (path) => {
       if (!devices.some((d) => d.path === path)) {
         return Promise.reject(new Error("That device is no longer connected."));
@@ -2092,16 +2102,6 @@ export function createMockBackend(options: MockOptions = {}): Backend {
         onDevice: [...(deviceLibraries.get(path) ?? [])],
         libraries: ["Device Library", "OneLibrary"].map(name => ({ name, nodes: (deviceLibraries.get(path) ?? []).map((name, i) => ({ id: String(i+1), parentId: "0", name, folder: false })) })),
         automatic: autoSync.has(path),
-    formatDevice: async (path, layout) => {
-      const device = devices.find(d => d.path === path);
-      if (!device) throw new Error("That device is no longer connected.");
-      formattedAs.set(path, layout === "fat32" ? "FAT32" : "FAT32 + HFS+");
-      device.freeBytes = device.totalBytes;
-      device.export = null;
-      deviceLibraries.delete(path);
-      syncSelections.delete(path);
-      await wait(undefined);
-    },
       });
     },
     onSyncProgress: (listener) => {

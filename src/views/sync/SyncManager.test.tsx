@@ -288,36 +288,39 @@ describe("SyncManager", () => {
     if (!el) throw new Error("nothing to right-click");
     act(() => { el.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 10, clientY: 10 })); });
   };
-  const openFormat = (name: string) => {
-    rightClick(box(name)?.closest("div") ?? null);
-    click(document.body.querySelector<HTMLElement>('[role="menuitem"]'));
+  const openFormat = async (name: string) => {
+    if (!document.body.querySelector(`[aria-label="${name} library"]`)) {
+      click(document.body.querySelector<HTMLElement>(`button[aria-label="Expand ${name}"]`));
+      await settle();
+    }
+    click([...document.body.querySelectorAll<HTMLButtonElement>(`[aria-label="${name} library"] button`)]
+      .find(b => b.textContent === "Format USB…"));
   };
   const dialog = () => document.body.querySelector("dialog");
 
-  it("formats a drive from its right-click menu after warning that everything is erased", async () => {
-    openFormat("USB A");
-    expect(dialog()?.textContent).toContain("completely erased");
-    expect(dialog()?.textContent).toContain("all of its partitions");
+  it("formats a drive from its expanded row after warning that everything is erased", async () => {
+    await openFormat("USB A");
+    expect(dialog()?.textContent).toContain("ALL DATA WILL BE ERASED");
     expect(dialog()?.textContent).toContain("USB A");
     expect(formatDevice).not.toHaveBeenCalled();
     click(box("USB A"));
     const choose = (text: string) => [...document.body.querySelectorAll<HTMLInputElement>('dialog input[type="radio"]')]
       .find(input => input.closest("label")?.textContent?.startsWith(text));
-    click(choose("FAT32 and HFS+"));
+    click(choose("HFS+"));
     click([...document.body.querySelectorAll<HTMLButtonElement>("dialog button")].find(b => b.textContent === "Erase and Format"));
     await settle();
-    expect(formatDevice).toHaveBeenCalledWith("/Volumes/USB A", "fat32AndHfsPlus");
+    expect(formatDevice).toHaveBeenCalledWith("/Volumes/USB A", "hfsPlus");
     expect(dialog()).toBeNull();
     expect(status()).toBe("USB A: Formatted.");
     expect(box("USB A")?.checked).toBe(false);
   });
 
   it("formats as plain FAT32 by default and can be cancelled without touching the drive", async () => {
-    openFormat("USB B");
+    await openFormat("USB B");
     click([...document.body.querySelectorAll<HTMLButtonElement>("dialog button")].find(b => b.textContent === "Cancel"));
     expect(dialog()).toBeNull();
     expect(formatDevice).not.toHaveBeenCalled();
-    openFormat("USB B");
+    await openFormat("USB B");
     click([...document.body.querySelectorAll<HTMLButtonElement>("dialog button")].find(b => b.textContent === "Erase and Format"));
     await settle();
     expect(formatDevice).toHaveBeenCalledWith("/Volumes/USB B", "fat32");
@@ -325,7 +328,7 @@ describe("SyncManager", () => {
 
   it("keeps the dialog open and says why when formatting fails", async () => {
     formatDevice.mockRejectedValueOnce({ kind: "internal", message: "Device is busy." });
-    openFormat("USB B");
+    await openFormat("USB B");
     click([...document.body.querySelectorAll<HTMLButtonElement>("dialog button")].find(b => b.textContent === "Erase and Format"));
     await settle();
     expect(dialog()?.textContent).toContain("Device is busy.");
@@ -333,8 +336,7 @@ describe("SyncManager", () => {
     expect(box("USB B")).not.toBeNull();
   });
 
-  it("offers no format menu while an export is running", () => {
-    act(() => exportProgress?.({ path: "/Volumes/USB B", state: "copying", done: 1, total: 10, title: "Track" }));
+  it("has no right-click menu on a drive", () => {
     rightClick(box("USB B")?.closest("div") ?? null);
     expect(document.body.querySelector('[role="menu"]')).toBeNull();
   });

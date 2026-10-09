@@ -1276,7 +1276,7 @@ export interface ExportReport {
 
 /** What one destination got out of a sync: its report, or why it got none. */
 /** How a stick is laid out by `formatDevice`. */
-export type FormatLayout = "fat32" | "fat32AndHfsPlus";
+export type FormatLayout = "fat32" | "hfsPlus";
 
 export interface SyncDeviceReport {
   ejected?: boolean;

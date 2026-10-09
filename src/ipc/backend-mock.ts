@@ -1229,6 +1229,15 @@ export function createMockBackend(options: MockOptions = {}): Backend {
       return refuse(`no cue ${cueId}`);
     },
     convertMemoryCuesToHot: (track) => {
+    setCueComment: (cueId, comment) => {
+      for (const [trackId, list] of cueStore) {
+        const cue = list.find((item) => item.id === cueId);
+        if (!cue) continue;
+        cue.comment = comment;
+        return cuesChanged(trackId, undefined);
+      }
+      return refuse(`no cue ${cueId}`);
+    },
       const cues = cuesOf(track);
       const taken = new Set(cues.map((c) => c.letter));
       const free = [..."ABCDEFGHIJKLMNOP"].filter((letter) => !taken.has(letter));

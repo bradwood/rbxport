@@ -1723,6 +1723,8 @@ export interface Edits {
    * `fromMs` applies the edit from the beat nearest that time on — the scope
    * point, or the playhead for the from-here buttons — and `deck` names the
    * deck the track is loaded on, so its metronome follows the new grid.
+  /** Names a cue; an empty name leaves it unnamed. */
+  setCueComment(cue: string, comment: string): Promise<void>;
    * Every one resolves to the grid's state afterwards.
    */
   gridEdit(track: string, edit: GridEdit, options?: GridEditOptions): Promise<GridState>;

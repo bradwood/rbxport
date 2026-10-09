@@ -1654,6 +1654,23 @@ impl Writer {
         Ok(Changed { rows, usn })
     }
 
+    /// Sets a cue's name; an empty name leaves it unnamed.
+    pub fn set_cue_comment(&mut self, cue: &str, comment: &str) -> Result<Changed> {
+        self.prepare()?;
+        let stamp = time::now();
+        let tx = self.library.connection_mut()
+            .transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let usn = next_usn(&tx)?;
+        let rows = tx.execute(
+            "UPDATE djmdCue SET Comment = ?1, rb_local_usn = ?2, updated_at = ?3
+             WHERE ID = ?4 AND rb_local_deleted = 0",
+            params![comment, usn, stamp, cue],
+        )?;
+        set_counter(&tx, usn)?;
+        tx.commit()?;
+        Ok(Changed { rows, usn })
+    }
+
     /// Adds a loop: a cue with an end as well as a start.
     ///
     /// `beats` is the loop's length in beats, which `BeatLoopSize` carries as

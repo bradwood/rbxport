@@ -638,6 +638,7 @@ pub fn run() {
             cues::set_cue_colour,
             cues::delete_cue,
             cues::convert_memory_cues_to_hot,
+            cues::set_cue_comment,
             commands::filter_values,
             device_settings::device_settings,
             device_settings::write_device_defaults,

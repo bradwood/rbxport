@@ -575,6 +575,7 @@ async function realBackend(): Promise<Backend> {
       setCueColour: (cue, colour) => invoke<void>("set_cue_colour", { cue, colour }),
       deleteCue: (cue) => invoke<void>("delete_cue", { cue }),
       gridEdit: (track, edit, options) =>
+      setCueComment: (cue, comment) => invoke<void>("set_cue_comment", { cue, comment }),
         invoke<GridState>("grid_edit", {
           track, edit, fromMs: options?.fromMs ?? null, deck: options?.deck ?? null, options,
         }),

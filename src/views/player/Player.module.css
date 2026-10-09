@@ -1135,6 +1135,15 @@ button.pageNumber:disabled { color: var(--c-icon-off); }
 .cueTime { color: var(--c-text); font-variant-numeric: tabular-nums; flex: none; }
 .memoryCueDot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
 .cueName { color: var(--c-text); flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; }
+.cueNameInput {
+  flex: 1;
+  min-width: 0;
+  font: inherit;
+  color: var(--c-text);
+  background: transparent;
+  border: 1px solid var(--c-text);
+  padding: 0 2px;
+}
 .cueDelete { color: var(--c-cue-delete); flex: none; }
 /* The memory list's ✕ is a button of its own; the hot-cue list's is still a
    glyph. Same glyph, same place, and disabled it dims like the pad row's. */

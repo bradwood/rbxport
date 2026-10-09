@@ -765,6 +765,49 @@ const PANELS = [
   { id: "info", label: "INFO" },
 ] as const;
 
+/** A cue's name in the cue list: blank when it has none, edited in place on a double-click. */
+function CueName({ cue, renaming, setRenaming, canEdit, onSave }: {
+  cue: Cue;
+  renaming: { id: string; text: string } | null;
+  setRenaming: (next: { id: string; text: string } | null) => void;
+  canEdit: boolean;
+  onSave: (text: string) => void;
+}) {
+  if (renaming !== null && renaming.id === cue.id) {
+    return (
+      <input
+        className={styles.cueNameInput}
+        aria-label="Cue name"
+        autoFocus
+        value={renaming.text}
+        onChange={(event) => setRenaming({ id: cue.id, text: event.target.value })}
+        onClick={(event) => event.stopPropagation()}
+        onKeyDown={(event) => {
+          event.stopPropagation();
+          if (event.key === "Enter") {
+            event.preventDefault();
+            onSave(renaming.text.trim());
+            setRenaming(null);
+          } else if (event.key === "Escape") {
+            setRenaming(null);
+          }
+        }}
+        onBlur={() => setRenaming(null)}
+      />
+    );
+  }
+  return (
+    <span
+      className={styles.cueName}
+      onDoubleClick={() => {
+        if (canEdit && cue.id !== "") setRenaming({ id: cue.id, text: cue.comment ?? "" });
+      }}
+    >
+      {cue.comment}
+    </span>
+  );
+}
+
 export const Player = memo(function Player({
   track, onEject, onError, onAnalyse, onDropTrack, onLoadSelected, selectedTrackId = null,
   onExportTrack, devices = [], onExportLoop,
@@ -842,6 +885,7 @@ export const Player = memo(function Player({
   );
   const [padMode, setPadMode] = useState<PadMode>("cue");
   const [panel, setPanel] = useState<CuePanel>("memory");
+  const [renamingCue, setRenamingCue] = useState<{ id: string; text: string } | null>(null);
   const [cueColorMenu, setCueColorMenu] = useState<{x: number; y: number; cue: Cue} | null>(null);
   const writeCue = useCueWriter(onError);
   /**
@@ -2824,7 +2868,8 @@ export const Player = memo(function Player({
                   {cue ? (
                     <>
                       <span className={styles.cueTime}>{splitTime(cue.positionMs / 1000).main}</span>
-                      <span className={styles.cueName}>{cue.comment || "CUE(Auto)"}</span>
+                      <CueName cue={cue} renaming={renamingCue} setRenaming={setRenamingCue}
+                        canEdit={hot.canEdit} onSave={(text) => writeCue((edits) => edits.setCueComment(cue.id, text))} />
                       <button
                         type="button"
                         className={styles.cueDelete}
@@ -2873,7 +2918,8 @@ export const Player = memo(function Player({
               >
                 {cue.colour ? <span className={styles.memoryCueDot} style={{background: cue.colour}} aria-hidden /> : null}
                 <span className={styles.cueTime}>{memoryTime(cue.positionMs)}</span>
-                <span className={styles.cueName}>{cue.comment || "CUE(Auto)"}</span>
+                <CueName cue={cue} renaming={renamingCue} setRenaming={setRenamingCue}
+                  canEdit={!readOnly} onSave={(text) => writeCue((edits) => edits.setCueComment(cue.id, text))} />
                 <button
                   type="button"
                   className={styles.cueDelete}

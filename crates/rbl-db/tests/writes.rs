@@ -1312,6 +1312,22 @@ fn a_file_is_imported_in_the_shape_a_local_row_has() {
     write_wav(&path, 2);
 
     let mut f = fixture();
+#[test]
+fn a_cue_can_be_named_and_unnamed() {
+    let mut f = fixture();
+    let id = f.writer.add_cue(&track_id(0), 0, 1_000).unwrap();
+    let comment = |writer: &Writer| -> String {
+        writer.library().connection().query_row(
+            "SELECT Comment FROM djmdCue WHERE ID=?1", [&id], |row| row.get(0),
+        ).unwrap()
+    };
+    assert_eq!(comment(&f.writer), "");
+    f.writer.set_cue_comment(&id, "Drop").unwrap();
+    assert_eq!(comment(&f.writer), "Drop");
+    f.writer.set_cue_comment(&id, "").unwrap();
+    assert_eq!(comment(&f.writer), "");
+}
+
     let id = f.writer.import_file(&path).unwrap();
 
     let (status, local_status, synced, usn): (i64, i64, i64, Option<i64>) = f

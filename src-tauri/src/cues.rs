@@ -77,6 +77,7 @@ pub enum CueEdit {
     Colour { cue: String, colour: Option<u8> },
     Delete { cue: String },
 }
+    Comment { cue: String, comment: String },
 
 /// What an edit did: the cue it touched and the track whose cues to re-read.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -123,6 +124,14 @@ pub fn apply(writer: &mut rbl_db::write::Writer, edit: CueEdit) -> AppResult<Cue
             // owner, and the owner is whose cues the index has to re-read.
             let track = owner_of(writer, &cue)?;
             let changed = writer.delete_cue(&cue).map_err(write_error)?;
+            if changed.rows == 0 {
+                return Err(AppError::new(ErrorKind::NotFound, format!("no cue {cue}")));
+            }
+            Ok(CueChange { track, cue })
+        }
+        CueEdit::Comment { cue, comment } => {
+            let track = owner_of(writer, &cue)?;
+            let changed = writer.set_cue_comment(&cue, &comment).map_err(write_error)?;
             if changed.rows == 0 {
                 return Err(AppError::new(ErrorKind::NotFound, format!("no cue {cue}")));
             }
@@ -234,6 +243,13 @@ pub async fn delete_cue<R: tauri::Runtime>(
 pub async fn convert_memory_cues_to_hot<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     state: State<'_, Arc<AppState>>,
+#[tauri::command]
+pub async fn set_cue_comment<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>, state: State<'_, Arc<AppState>>, cue: String, comment: String,
+) -> AppResult<()> {
+    edit_cues(app, state, "set_cue_comment", CueEdit::Comment { cue, comment }).await.map(|_| ())
+}
+
     track: String,
 ) -> AppResult<u32> {
     let library = state.library()?;

@@ -604,7 +604,7 @@ export function SyncManager({ windowed = false, onClose, onSynced, onReady }: Sy
         await Promise.all(reports.filter(r => !r.ejected).map(({ path }) => readDevice(path, false).catch(() => {})));
         onSynced?.();
       } catch (e) {
-        setStatus([e instanceof Error ? e.message : t("The sync could not be written.")]);
+        setStatus([e instanceof Error || (e && typeof e === "object" && "message" in e) || typeof e === "string" ? errorMessage(e) : t("The sync could not be written.")]);
       } finally {
         stop();
         setOperation(null);

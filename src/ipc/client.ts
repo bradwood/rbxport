@@ -16,6 +16,7 @@ import type {
   TreeNode, ViewHandle,
   SelectionDetails, TrackDetails, TrackLookups,
 } from "./types";
+import { tauriInvoke } from "./invoke";
 
 const isTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 
@@ -26,12 +27,8 @@ export function nativeTrackDragging(): boolean {
 
 /** Resolves when the native drag finishes, including cancellation. */
 export async function dragTracksToDesktop(ids: readonly string[]): Promise<void> {
-  const { invoke } = await import("@tauri-apps/api/core");
-  try {
-    await invoke("drag_tracks", { ids: [...ids] });
-  } catch (error) {
-    throw error instanceof Error ? error : new Error(String(error));
-  }
+  const invoke = await tauriInvoke();
+  await invoke("drag_tracks", { ids: [...ids] });
 }
 
 /** Resolve a DOM file drop without intercepting the webview's internal drags. */
@@ -40,12 +37,8 @@ export async function droppedFilePaths(files: File[]): Promise<string[]> {
   const paths = files.map((file) => (file as File & { path?: string }).path);
   if (paths.every((path): path is string => Boolean(path))) return paths;
   if (!isTauri) throw new Error("Drop files in the desktop app to import them.");
-  const { invoke } = await import("@tauri-apps/api/core");
-  try {
-    return await invoke<string[]>("dropped_file_paths", { names: files.map((file) => file.name) });
-  } catch (error) {
-    throw error instanceof Error ? error : new Error(String(error));
-  }
+  const invoke = await tauriInvoke();
+  return invoke<string[]>("dropped_file_paths", { names: files.map((file) => file.name) });
 }
 
 export interface NativeFileDrop {
@@ -96,7 +89,7 @@ export async function importReplacing(
   args: Record<string, unknown>,
   confirmReplace: ConfirmReplace,
 ): Promise<XmlImportReport | null> {
-  const { invoke } = await import("@tauri-apps/api/core");
+  const invoke = await tauriInvoke();
   const first = await invoke<XmlImportReport>(command, args);
   return !first.sameNamed?.length ? first
     : await confirmReplace(first.sameNamed) ? invoke<XmlImportReport>(command, { ...args, replace: true }) : null;
@@ -105,7 +98,7 @@ export async function importReplacing(
 /** Keep the native Edit menu in sync with the focused editor's history. */
 export async function setHistoryMenu(undo: string | null, redo: string | null): Promise<void> {
   if (!isTauri) return;
-  const { invoke } = await import("@tauri-apps/api/core");
+  const invoke = await tauriInvoke();
   await invoke("set_history_menu", { undo, redo });
 }
 
@@ -131,7 +124,7 @@ function subscribe<T>(event: string, listener: (payload: T) => void): () => void
 }
 
 async function realBackend(): Promise<Backend> {
-  const { invoke } = await import("@tauri-apps/api/core");
+  const invoke = await tauriInvoke();
   return {
     rekordboxBrowseSettings: () => invoke<string | null>("rekordbox_browse_settings"),
     librarySummary: () => invoke<LibrarySummary>("library_summary"),

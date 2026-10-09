@@ -579,6 +579,16 @@ describe("SyncManager", () => {
     expect(host.querySelector(".filesystemWarning, [title*='FAT32']")).toBeNull();
   });
 
+  it("says why a sync failed when the backend rejects with its error object", async () => {
+    syncDevices.mockRejectedValueOnce({ kind: "internal", message: "The USB ran out of space." });
+    click(box("USB A"));
+    click(box("USB B"));
+    await settle();
+    click(host.querySelector<HTMLButtonElement>('button[aria-label="SYNC"]'));
+    await settle();
+    expect(status()).toContain("The USB ran out of space.");
+  });
+
   it("requests post-sync ejection and distinguishes eject errors from sync errors", async () => {
     syncDevices.mockResolvedValueOnce([
       { ...report("/Volumes/USB A", 5), ejected: true },

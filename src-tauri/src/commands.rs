@@ -3997,7 +3997,7 @@ mod tests {
     #[test]
     fn a_missing_analysis_file_does_not_fail_the_export() {
         let share = tempfile::tempdir().unwrap();
-        assert!(read_analysis(share.path(), "/PIONEER/USBANLZ/ca6/gone/ANLZ0000.DAT").unwrap().is_empty());
+        assert_eq!(read_analysis(share.path(), "/PIONEER/USBANLZ/ca6/gone/ANLZ0000.DAT").unwrap(), []);
     }
 
     /// An edit made with three tracks selected writes all three, and one

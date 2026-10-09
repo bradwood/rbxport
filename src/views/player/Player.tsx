@@ -2872,7 +2872,7 @@ export const Player = memo(function Player({
                     setDragSlot(null);
                     setDropSlot(null);
                   } : undefined}
-                  onClick={() => hot.press(letter)}
+                  onClick={cue ? () => hot.press(letter) : undefined}
                   onContextMenu={cue ? (event) => {
                     event.preventDefault(); event.stopPropagation();
                     setCueColorMenu({x: event.clientX, y: event.clientY, cue});

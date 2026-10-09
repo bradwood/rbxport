@@ -1141,6 +1141,12 @@ pub async fn estimate_sync(
                     delete_unlisted_music.unwrap_or(false),
                     compatibility_format,
                 );
+                tracing::debug!(
+                    %path, selected = selection.tracks.len(), copy_bytes = found.copy_bytes, reuse_bytes = found.reuse_bytes,
+                    free_bytes = found.free_bytes, new = found.tracks_new, changed = found.tracks_changed,
+                    kept = found.tracks_kept, removed = found.tracks_removed, missing = found.tracks_missing,
+                    "sync estimate"
+                );
                 crate::dto::SyncEstimateDto {
                     path,
                     copy_bytes: found.copy_bytes,

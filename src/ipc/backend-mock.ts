@@ -843,6 +843,7 @@ export function createMockBackend(options: MockOptions = {}): Backend {
     const already = device.export;
     const reused = already?.ours === true ? Math.min(already.tracks, tracks) : 0;
     const removed = already?.ours === true ? Math.max(0, already.tracks - tracks) : 0;
+    const tracksAdded = tracks - reused;
     const playlistsAdded = Math.max(0, playlistIds.length - (already?.ours === true ? already.playlists : 0));
     const playlistsRemoved = Math.max(0, (already?.ours === true ? already.playlists : 0) - playlistIds.length);
     device.export = {
@@ -888,6 +889,8 @@ export function createMockBackend(options: MockOptions = {}): Backend {
       analysisFiles: tracks - reused,
       reused,
       removed,
+      tracksAdded,
+      tracksUpdated: 0,
       playlistsAdded,
       playlistsRemoved,
       skipped: [],
@@ -2012,7 +2015,7 @@ export function createMockBackend(options: MockOptions = {}): Backend {
         const tracks = playlistSize(playlistId);
         return wait({
           tracks, playlists: 1, bytesCopied: tracks * 8_000_000, analysisFiles: tracks,
-          reused: 0, removed: 0, playlistsAdded: 1, playlistsRemoved: 0, skipped: [], verified: true,
+          reused: 0, removed: 0, tracksAdded: tracks, tracksUpdated: 0, playlistsAdded: 1, playlistsRemoved: 0, skipped: [], verified: true,
         });
       }
       return mockExport(destination, () => writeTo(device, [playlistId], defaults, deleteUnlistedMusic));

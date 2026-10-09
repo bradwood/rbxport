@@ -57,6 +57,7 @@ fn a_second_export_of_the_same_tracks_copies_nothing() {
     assert_eq!(first.bytes_copied, 4096);
     assert_eq!(first.analysis_files, 2);
     assert_eq!((first.playlists_added, first.playlists_removed), (1, 0));
+    assert_eq!((first.tracks_added, first.tracks_updated), (2, 0));
 
     let second = export(dest.path(), &tracks, &one_list(&tracks)).unwrap();
     assert_eq!(second.tracks, 2, "the stick still holds both");
@@ -66,6 +67,7 @@ fn a_second_export_of_the_same_tracks_copies_nothing() {
     assert_eq!(second.analysis_files, 0, "the analysis was already there");
     assert_eq!(second.removed, 0);
     assert_eq!((second.playlists_added, second.playlists_removed), (0, 0));
+    assert_eq!((second.tracks_added, second.tracks_updated), (0, 0));
 
     // And the stick is still a stick.
     let check = verify(dest.path()).unwrap();
@@ -298,4 +300,42 @@ fn a_sync_keeps_the_settings_the_stick_already_carries() {
     export(dest.path(), &tracks, &one_list(&tracks)).unwrap();
     let after = StickSettings::read(&db).unwrap();
     assert_eq!(after, settings);
+}
+
+#[test]
+fn an_estimate_counts_what_a_sync_would_copy_keep_and_remove() {
+    use rbl_export::estimate::estimate;
+    let src = tempfile::tempdir().unwrap();
+    let dest = tempfile::tempdir().unwrap();
+    let tracks = vec![
+        track(src.path(), 1, "All U Need", "TRIODE"),
+        track(src.path(), 2, "The Abyss", "ARTBAT"),
+    ];
+
+    // A stick with no export: everything is new.
+    let cold = estimate(dest.path(), 0, &tracks, false, None);
+    assert_eq!((cold.tracks_new, cold.copy_bytes, cold.tracks_kept), (2, 4096, 0));
+
+    export(dest.path(), &tracks, &one_list(&tracks)).unwrap();
+    let db_id = Manifest::load(dest.path()).unwrap().db_id;
+
+    // The same selection: nothing to copy, both tracks already there.
+    let same = estimate(dest.path(), db_id, &tracks, false, None);
+    assert_eq!((same.copy_bytes, same.tracks_kept, same.reuse_bytes), (0, 2, 4096));
+
+    // One more track, and the second one dropped.
+    let mut next = vec![tracks[0].clone(), track(src.path(), 3, "Nova", "KYAU")];
+    let moved = estimate(dest.path(), db_id, &next, true, None);
+    assert_eq!((moved.tracks_new, moved.copy_bytes), (1, 2048));
+    assert_eq!((moved.tracks_removed, moved.free_bytes), (1, 2048));
+
+    // A source that changed since it was written is copied again.
+    std::fs::write(&next[0].source_path, vec![9u8; 3000]).unwrap();
+    next.truncate(1);
+    let changed = estimate(dest.path(), db_id, &next, true, None);
+    assert_eq!((changed.tracks_changed, changed.copy_bytes), (1, 3000));
+
+    // Another library's record is not this one's to trust.
+    let other = estimate(dest.path(), db_id + 1, &tracks, false, None);
+    assert_eq!((other.tracks_new, other.tracks_kept), (2, 0));
 }

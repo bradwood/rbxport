@@ -201,6 +201,11 @@ pub struct ExportReport {
     pub in_place: usize,
     /// Tracks taken off the stick because the selection no longer holds them.
     pub removed: usize,
+    /// Tracks the stick did not hold before this export.
+    pub tracks_added: usize,
+    /// Tracks the stick already held whose audio was written again because
+    /// it changed.
+    pub tracks_updated: usize,
     /// Playlists newly present in this generation (folders excluded).
     pub playlists_added: usize,
     /// Playlists removed from this generation (folders excluded).
@@ -896,6 +901,7 @@ pub fn export_cancellable(
         let profile = conversion.map_or("", rbl_audio::compatibility::Format::profile);
         let source_hash = if conversion.is_some() { file_hash(&track.source_path)? } else { 0 };
         let carried = stale.remove(&key);
+        if carried.is_none() { report.tracks_added += 1; }
         let audio_dest = under(destination, &place.audio);
         // Unchanged means: same source bytes by size and time, same place on
         // the stick, and still actually there.
@@ -940,6 +946,7 @@ pub fn export_cancellable(
             report.reused += 1;
             report.bytes_reused += output_size;
         } else {
+            if carried.is_some() { report.tracks_updated += 1; }
             progress(&ExportProgress { stage: "copying", done: index, total: tracks.len(), title: track.title.clone() });
             let audio_dest = under(publication.stage(), &place.audio);
             if let Some(parent) = audio_dest.parent() {

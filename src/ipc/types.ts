@@ -1264,6 +1264,10 @@ export interface ExportReport {
   reused: number;
   /** Tracks taken off the stick because the playlist no longer holds them. */
   removed: number;
+  /** Tracks the stick did not hold before this export. */
+  tracksAdded: number;
+  /** Tracks already on the stick that were written again because they changed. */
+  tracksUpdated: number;
   /** Playlists newly added to this USB during the export. */
   playlistsAdded: number;
   /** Playlists removed from this USB during the export. */

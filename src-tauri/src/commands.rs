@@ -1788,6 +1788,8 @@ fn write_export_with_phase(
         analysis_files: u32::try_from(report.analysis_files).unwrap_or(0),
         reused: u32::try_from(report.reused).unwrap_or(0),
         removed: u32::try_from(report.removed).unwrap_or(0),
+        tracks_added: u32::try_from(report.tracks_added).unwrap_or(0),
+        tracks_updated: u32::try_from(report.tracks_updated).unwrap_or(0),
         playlists_added: u32::try_from(report.playlists_added).unwrap_or(0),
         playlists_removed: u32::try_from(report.playlists_removed).unwrap_or(0),
         skipped: report.skipped,

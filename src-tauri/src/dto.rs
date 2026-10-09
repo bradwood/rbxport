@@ -394,6 +394,10 @@ pub struct ExportReportDto {
     pub reused: u32,
     /// Tracks taken off the stick because the playlist no longer holds them.
     pub removed: u32,
+    /// Tracks the stick did not hold before.
+    pub tracks_added: u32,
+    /// Tracks already on the stick that were written again because they changed.
+    pub tracks_updated: u32,
     pub playlists_added: u32,
     pub playlists_removed: u32,
     /// Tracks left out because their audio was missing or unreadable.

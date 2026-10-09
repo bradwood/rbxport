@@ -926,10 +926,10 @@ export function SyncManager({ windowed = false, onClose, onSynced, onReady }: Sy
                   {completedReports.has(device.path) ? (() => {
                     const report = completedReports.get(device.path)!;
                     return <div className={styles.exportReport} aria-label={`${device.name} export report`}>
-                      <span><strong>{Math.max(0, report.tracks - report.reused)}</strong> updated</span>
-                      <span><strong>{report.reused}</strong> unchanged</span>
-                      <span><strong>+{report.playlistsAdded}</strong> playlists</span>
-                      <span><strong>−{report.playlistsRemoved}</strong> playlists</span>
+                      <span><strong>{report.tracksAdded}</strong> tracks added</span>
+                      <span><strong>{report.removed}</strong> tracks removed</span>
+                      <span><strong>{report.tracksUpdated}</strong> tracks updated</span>
+                      <span><strong>{Math.max(0, report.tracks - report.tracksAdded - report.tracksUpdated)}</strong> unchanged</span>
                       {report.skipped.length > 0 ? <span className={styles.exportWarning}><strong>{report.skipped.length}</strong> missing</span> : null}
                     </div>;
                   })() : null}

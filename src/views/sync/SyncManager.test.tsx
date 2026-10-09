@@ -52,7 +52,7 @@ const STATES: Record<string, DeviceSyncState> = {
 
 const report = (path: string, tracks: number): SyncDeviceReport => ({
   path,
-  report: { tracks, playlists: 1, bytesCopied: 0, analysisFiles: 0, reused: 0, removed: 0, playlistsAdded: 1, playlistsRemoved: 0, skipped: [], verified: true },
+  report: { tracks, playlists: 1, bytesCopied: 0, analysisFiles: 0, reused: 0, removed: 0, tracksAdded: tracks, tracksUpdated: 0, playlistsAdded: 1, playlistsRemoved: 0, skipped: [], verified: true },
 });
 
 let host: HTMLDivElement;
@@ -593,9 +593,9 @@ describe("SyncManager", () => {
     expect(box("Eject after syncing")?.disabled).toBe(true);
     await settle();
     expect(syncDevices.mock.calls[0]?.[4]).toBe(true);
-    expect(host.querySelector('[aria-label="USB A export report"]')?.textContent).toContain("5 updated");
+    expect(host.querySelector('[aria-label="USB A export report"]')?.textContent).toContain("5 tracks added");
     expect(status()).toContain("Safely ejected.");
-    expect(host.querySelector('[aria-label="USB B export report"]')?.textContent).toContain("5 updated");
+    expect(host.querySelector('[aria-label="USB B export report"]')?.textContent).toContain("5 tracks added");
     expect(status()).toContain("Not ejected: Device is busy.");
   });
 
@@ -677,8 +677,8 @@ describe("SyncManager", () => {
     expect(syncDevices.mock.calls[0]?.[4]).toBe(false);
     expect(box("Automatic synchronization for USB A")).toBeNull();
     expect(box("Automatic synchronization for USB B")).toBeNull();
-    expect(host.querySelector('[aria-label="USB A export report"]')?.textContent).toContain("30 updated");
-    expect(host.querySelector('[aria-label="USB B export report"]')?.textContent).toContain("30 updated");
+    expect(host.querySelector('[aria-label="USB A export report"]')?.textContent).toContain("30 tracks added");
+    expect(host.querySelector('[aria-label="USB B export report"]')?.textContent).toContain("30 tracks added");
     expect(sync?.disabled).toBe(false);
   });
 
@@ -693,7 +693,7 @@ describe("SyncManager", () => {
     await settle();
     click(host.querySelector<HTMLButtonElement>('button[aria-label="SYNC"]'));
     await settle();
-    expect(host.querySelector('[aria-label="USB A export report"]')?.textContent).toContain("5 updated");
+    expect(host.querySelector('[aria-label="USB A export report"]')?.textContent).toContain("5 tracks added");
     expect(status()).toContain("USB B: That device is no longer connected.");
   });
 

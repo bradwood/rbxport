@@ -2993,6 +2993,9 @@ export const Player = memo(function Player({
       {cueColorMenu ? <CueColorMenu
         x={cueColorMenu.x} y={cueColorMenu.y} memory={cueColorMenu.cue.memory}
         onClose={() => setCueColorMenu(null)}
+        onComment={!readOnly && cueColorMenu.cue.id !== ""
+          ? () => setRenamingCue({ id: cueColorMenu.cue.id, text: cueColorMenu.cue.comment ?? "" })
+          : undefined}
         onChoose={(colour) => {
           if (!readOnly && cueColorMenu.cue.id !== "") {
             writeCue((edits) => edits.setCueColour(cueColorMenu.cue.id, colour));

@@ -16,13 +16,39 @@ const HOT_CSS = [
   "#10B176", "#28E214", "#A5E116", "#B4BE04", "#C3AF04", "#E0641B", "#E02823", "#F51E8C",
 ] as const;
 
-export function CueColorMenu({ x, y, memory, onChoose, onClose }: {
+/**
+ * Closing a menu by clicking elsewhere must not also act on what was clicked,
+ * as a cue row would by jumping to its cue. The click that follows this
+ * mouse-down is cancelled before it reaches the page; a later mouse-down
+ * ends the wait, so a press that never completes cannot eat a later click.
+ */
+function swallowNextClick(): void {
+  const stop = (event: Event) => {
+    event.stopPropagation();
+    event.preventDefault();
+    done();
+  };
+  const done = () => {
+    window.removeEventListener("click", stop, true);
+    window.removeEventListener("mousedown", done, true);
+  };
+  window.addEventListener("click", stop, true);
+  window.addEventListener("mousedown", done, true);
+}
+
+export function CueColorMenu({ x, y, memory, onChoose, onComment, onClose }: {
   x: number; y: number; memory: boolean;
+  /** Starts editing the cue's comment; absent when the cue cannot be edited. */
+  onComment?: (() => void) | undefined;
   onChoose: (colour: number | null) => void; onClose: () => void;
 }) {
   const menu = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    const outside = (event: MouseEvent) => { if (!menu.current?.contains(event.target as Node)) onClose(); };
+    const outside = (event: MouseEvent) => {
+      if (menu.current?.contains(event.target as Node)) return;
+      onClose();
+      swallowNextClick();
+    };
     const key = (event: KeyboardEvent) => { if (event.key === "Escape") onClose(); };
     window.addEventListener("mousedown", outside, true);
     window.addEventListener("keydown", key);
@@ -36,15 +62,24 @@ export function CueColorMenu({ x, y, memory, onChoose, onClose }: {
     element.style.top = `${Math.max(8, Math.min(y, window.innerHeight - box.height - 8))}px`;
   }, [x, y, memory]);
   const choose = (value: number | null) => { onChoose(value); onClose(); };
+  const commentButton = (
+    <button role="menuitem" className={styles.comments} disabled={!onComment}
+      onClick={() => { onComment?.(); onClose(); }}>Add comments</button>
+  );
   return createPortal(
     <div ref={menu} className={`${styles.menu} ${memory ? "" : styles.hotMenu}`} role="menu" aria-label={`${memory ? "Memory" : "Hot"} cue color`} style={{left: x, top: y}}>
-      {memory ? MEMORY.map(([name, color], index) => (
-        <button key={name} role="menuitem" className={styles.memory} onClick={() => choose(index)}>
-          <span className={styles.dot} style={{background: color}} />{name}
-        </button>
-      )) : (
+      {memory ? (
         <>
-          <button role="menuitem" className={styles.comments} disabled>Add comments</button>
+          {commentButton}
+          {MEMORY.map(([name, color], index) => (
+            <button key={name} role="menuitem" className={styles.memory} onClick={() => choose(index)}>
+              <span className={styles.dot} style={{background: color}} />{name}
+            </button>
+          ))}
+        </>
+      ) : (
+        <>
+          {commentButton}
           <div className={styles.grid} role="group" aria-label="Hot cue colors">
             {HOT.map((value, index) => <button key={value} aria-label={`Color ${index + 1}`} style={{background: HOT_CSS[index]}} onClick={() => choose(value)} />)}
           </div>

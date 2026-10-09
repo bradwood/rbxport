@@ -18,7 +18,6 @@ import { ArrowLeft, ArrowRight, LoaderCircle, Search, X } from "lucide-react";
 
 import { EjectIcon, FolderIcon, ListIcon, SmartListIcon } from "@/components/icons";
 import { getBackend } from "@/ipc/client";
-import type { Device, DeviceSyncState, ExportReport, FormatLayout, ItunesLibrary, TreeNode } from "@/ipc/types";
 import { formatSpace } from "@/lib/devices";
 import { errorMessage } from "@/lib/errorMessage";
 import { detectPlatform } from "@/lib/shortcuts";
@@ -29,6 +28,7 @@ import { usePreferences } from "@/store/usePreferences";
 import { useExportProgress, exportPercent } from "@/store/useExportProgress";
 import { StopExport } from "@/components/StopExport";
 import { FormatDeviceDialog } from "./FormatDeviceDialog";
+import { MissingFilesDialog } from "./MissingFilesDialog";
 import { useTranslation } from "@/i18n";
 import styles from "./SyncManager.module.css";
 
@@ -142,6 +142,7 @@ export function SyncManager({ windowed = false, onClose, onSynced, onReady }: Sy
   const [itunesLoading, setItunesLoading] = useState(true);
   const [itunesError, setItunesError] = useState("");
   const [ejectingPath, setEjectingPath] = useState<string | null>(null);
+  const [missingPrompt, setMissingPrompt] = useState<{ files: MissingExportFile[]; resolve: (proceed: boolean) => void } | null>(null);
   const [formatTarget, setFormatTarget] = useState<Device | null>(null);
   const busy = operation !== null || [...exportJobs.values()].some(job => ["preparing", "checking", "copying", "database", "verifying", "publishing", "ejecting"].includes(job.state));
   const [ejectAfterSync, setEjectAfterSync] = useState(false);
@@ -968,6 +969,7 @@ export function SyncManager({ windowed = false, onClose, onSynced, onReady }: Sy
   );
 
   const dialogs = <>
+    {missingPrompt ? <MissingFilesDialog files={missingPrompt.files} onChoose={missingPrompt.resolve} /> : null}
     {formatTarget ? <FormatDeviceDialog
       device={formatTarget}
       onFormat={layout => formatDevice(formatTarget, layout)}

@@ -223,25 +223,39 @@ describe("SyncManager", () => {
     expect(syncDevices).not.toHaveBeenCalled();
     expect(status()).toContain("selected USB device is no longer connected");
   });
-  it("lists missing source files and requires confirmation before writing", async () => {
+  it("lists missing source files in a dialog and requires confirmation before writing", async () => {
     validateExportFiles.mockResolvedValueOnce([
       { title: "Missing One", path: "/Music/missing-one.mp3" },
       { title: "Missing Two", path: "/Music/missing-two.wav" },
     ]);
-    confirmExport.mockResolvedValueOnce(false);
     click(box("Closing"));
     click(box("USB B"));
     await settle();
     click(host.querySelector<HTMLButtonElement>('button[aria-label="SYNC"]'));
     await settle();
     expect(validateExportFiles).toHaveBeenCalledWith(["p3"]);
-    expect(confirmExport).toHaveBeenCalledWith(
-      expect.stringContaining("2 selected tracks have missing audio files"),
-      { yes: "Yes", no: "No" },
-    );
-    expect(confirmExport.mock.calls[0]?.[0]).toContain("Missing One\n  /Music/missing-one.mp3");
+    const dialog = document.body.querySelector("dialog");
+    expect(dialog?.textContent).toContain("2 selected tracks have missing audio files");
+    expect(dialog?.textContent).toContain("Missing One");
+    expect(dialog?.textContent).toContain("/Music/missing-one.mp3");
+    expect(syncDevices).not.toHaveBeenCalled();
+    click([...dialog?.querySelectorAll<HTMLButtonElement>("button") ?? []].find(b => b.textContent === "Cancel"));
+    await settle();
+    expect(document.body.querySelector("dialog")).toBeNull();
     expect(syncDevices).not.toHaveBeenCalled();
     expect(status()).toContain("Export cancelled because files are missing.");
+  });
+  it("syncs the rest when the missing files are skipped", async () => {
+    validateExportFiles.mockResolvedValueOnce([{ title: "Missing One", path: "/Music/missing-one.mp3" }]);
+    click(box("Closing"));
+    click(box("USB B"));
+    await settle();
+    click(host.querySelector<HTMLButtonElement>('button[aria-label="SYNC"]'));
+    await settle();
+    expect(document.body.querySelector("dialog")?.textContent).toContain("1 selected track has a missing audio file");
+    click([...document.body.querySelectorAll<HTMLButtonElement>("dialog button")].find(b => b.textContent === "Skip them and sync"));
+    await settle();
+    expect(syncDevices).toHaveBeenCalled();
   });
   it("stops an export started outside Sync Manager", async () => {
     const job: ExportProgress = { path: "/Volumes/USB B", state: "copying", done: 3, total: 10, title: "Track" };

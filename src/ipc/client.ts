@@ -6,7 +6,7 @@
  */
 import { detectPlatform } from "@/lib/shortcuts";
 import type {
-  AnalysisResult, AudioDevices, Backend, Backup, BackupProgress, BackupSizes, ConfirmReplace, Cue, DeckEvent, Device, DeviceLibrary,
+  AnalysisResult, AudioDevices, Backend, Backup, BackupProgress, BackupSizes, ConfirmReplace, Cue, SyncEstimate, DeckEvent, Device, DeviceLibrary,
   DevicePlaylistEditResult, DeviceSettings, DeviceSyncState,
   Diagnostics, Duplicates, GridState, Limiter, PreferencesRequest, SmartRule, SyncDeviceReport, SyncProgress, UpdateCheck,
   UpdateProgress, UpdateReady, XmlImportReport,
@@ -500,6 +500,13 @@ async function realBackend(): Promise<Backend> {
         deleteUnlistedMusic: deleteUnlistedMusic ?? false,
         compatibilityFormat: compatibilityFormat ?? null,
       }),
+    estimateSync: (playlists, destinations, deleteUnlistedMusic, compatibilityFormat) =>
+      invoke<SyncEstimate[]>("estimate_sync", {
+        playlists,
+        destinations,
+        deleteUnlistedMusic: deleteUnlistedMusic ?? false,
+        compatibilityFormat: compatibilityFormat ?? null,
+      }),
     validateExportFiles: (playlists) => invoke<MissingExportFile[]>("validate_export_files", { playlists }),
     importUsb: (path, cues, history, settings) => invoke("import_usb", { path, cues, history, settings }),
     ejectDevice: (path) => invoke<void>("eject_device", { path }),
@@ -568,9 +575,9 @@ async function realBackend(): Promise<Backend> {
       moveCue: (cue, positionMs) => invoke<void>("move_cue", { cue, positionMs }),
       moveHotCue: (cue, letter) => invoke<void>("move_hot_cue", { cue, kind: { hot: letter } }),
       setCueColour: (cue, colour) => invoke<void>("set_cue_colour", { cue, colour }),
+      setCueComment: (cue, comment) => invoke<void>("set_cue_comment", { cue, comment }),
       deleteCue: (cue) => invoke<void>("delete_cue", { cue }),
       gridEdit: (track, edit, options) =>
-      setCueComment: (cue, comment) => invoke<void>("set_cue_comment", { cue, comment }),
         invoke<GridState>("grid_edit", {
           track, edit, fromMs: options?.fromMs ?? null, deck: options?.deck ?? null, options,
         }),

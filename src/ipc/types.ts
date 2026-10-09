@@ -850,6 +850,17 @@ export interface Backend {
   openReportAttachment(attachment: string): Promise<void>;
 
   /**
+   * What `syncDevices` would use and give back on each stick, from the record
+   * the stick holds. Writes nothing.
+   */
+  estimateSync(
+    playlists: string[],
+    destinations: string[],
+    deleteUnlistedMusic?: boolean,
+    compatibilityFormat?: "wav" | "aiff" | "mp3",
+  ): Promise<SyncEstimate[]>;
+
+  /**
    * Writes the same playlists to every destination, one after another, and
    * says how each fared. A stick that fails does not stop the rest: its
    * entry carries the error and the others their reports.
@@ -1303,6 +1314,24 @@ export interface SyncPlaylist {
   name: string;
 }
 
+/** What a sync would do to one stick's space, before it runs. */
+export interface SyncEstimate {
+  path: string;
+  /** Bytes of tracks that would be copied: new, or changed since written. */
+  copyBytes: number;
+  /** Bytes of tracks the stick already holds and the sync leaves alone. */
+  reuseBytes: number;
+  /** Bytes of audio the sync would remove from the stick. */
+  freeBytes: number;
+  tracksNew: number;
+  tracksChanged: number;
+  tracksKept: number;
+  tracksRemoved: number;
+  tracksMissing: number;
+  /** Some copied tracks would be converted, so their size is a guess. */
+  approximate: boolean;
+}
+
 /** What a stick was last synced with, and what it holds now. */
 export interface DeviceSyncState {
   /** Our last export's playlists; empty when the stick is not ours. */
@@ -1727,6 +1756,8 @@ export interface Edits {
   moveHotCue(cue: string, letter: string): Promise<void>;
   /** Changes a cue's palette entry; null resets it to its default. */
   setCueColour(cue: string, colour: number | null): Promise<void>;
+  /** Names a cue; an empty name leaves it unnamed. */
+  setCueComment(cue: string, comment: string): Promise<void>;
   deleteCue(cue: string): Promise<void>;
   /**
    * Convert Memory Cues to Hot Cues: each memory cue, by position, into the
@@ -1742,8 +1773,6 @@ export interface Edits {
    * `fromMs` applies the edit from the beat nearest that time on — the scope
    * point, or the playhead for the from-here buttons — and `deck` names the
    * deck the track is loaded on, so its metronome follows the new grid.
-  /** Names a cue; an empty name leaves it unnamed. */
-  setCueComment(cue: string, comment: string): Promise<void>;
    * Every one resolves to the grid's state afterwards.
    */
   gridEdit(track: string, edit: GridEdit, options?: GridEditOptions): Promise<GridState>;

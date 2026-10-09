@@ -311,10 +311,17 @@
 .storage { margin: 2px 12px 8px 30px; }
 .storage .capacity { margin: 0 0 6px; }
 .spaceBar { height: 8px; overflow: hidden; border: 1px solid var(--c-pref-control-off); border-radius: 3px; background: transparent; }
-.spaceBar > span { display: block; height: 100%; background: var(--c-accent); }
+.spaceBar { display: flex; }
+.spaceBar > span { display: block; height: 100%; flex: none; background: var(--c-accent); }
+.spaceBar > .pending { background: var(--c-sync-pending); }
+.spaceBar > .pending[data-over] { background: var(--c-error); }
 .storageLabels { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 8px; margin-top: 6px; color: var(--c-text-dim); font-size: var(--f-size-pref-small); font-variant-numeric: tabular-nums; }
 .storageLabels span:first-child { display: flex; align-items: center; gap: 5px; }
 .storageLabels i { width: 7px; height: 7px; border-radius: 1px; background: var(--c-accent); }
+.storageLabels .pendingLabel { display: flex; align-items: center; gap: 5px; }
+.storageLabels .pendingLabel i { background: var(--c-sync-pending); }
+.storageLabels .pendingLabel[data-over] { color: var(--c-error); }
+.storageLabels .pendingLabel[data-over] i { background: var(--c-error); }
 .capacity { margin: 2px 12px 8px 26px; font-size: var(--f-size-pref-small); }
 .library details > summary { cursor: pointer; padding: 5px 0; }
 .library [role="group"] { padding-left: 16px; }

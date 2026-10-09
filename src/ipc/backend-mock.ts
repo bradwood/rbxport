@@ -1232,7 +1232,6 @@ export function createMockBackend(options: MockOptions = {}): Backend {
       }
       return refuse(`no cue ${cueId}`);
     },
-    convertMemoryCuesToHot: (track) => {
     setCueComment: (cueId, comment) => {
       for (const [trackId, list] of cueStore) {
         const cue = list.find((item) => item.id === cueId);
@@ -1242,6 +1241,7 @@ export function createMockBackend(options: MockOptions = {}): Backend {
       }
       return refuse(`no cue ${cueId}`);
     },
+    convertMemoryCuesToHot: (track) => {
       const cues = cuesOf(track);
       const taken = new Set(cues.map((c) => c.letter));
       const free = [..."ABCDEFGHIJKLMNOP"].filter((letter) => !taken.has(letter));
@@ -2077,6 +2077,15 @@ export function createMockBackend(options: MockOptions = {}): Backend {
       }
       return reports;
     },
+    // The mock holds no audio, so a playlist is worth a fixed 300 MB of new
+    // tracks on a stick that has not been synced.
+    estimateSync: (playlists, destinations) => wait(destinations.map((path) => {
+      const copyBytes = playlists.length * 300 * 1024 ** 2;
+      return {
+        path, copyBytes, reuseBytes: 0, freeBytes: 0, tracksNew: playlists.length * 10, tracksChanged: 0,
+        tracksKept: 0, tracksRemoved: 0, tracksMissing: 0, approximate: false,
+      };
+    })),
     validateExportFiles: () => wait([]),
     smartRule: (playlist) => wait(smartRules.get(playlist) ?? { logic: "all", conditions: [] }),
     importUsb: () => Promise.resolve({ tracks: 0, histories: 0, settings: 0, skipped: 0, unchanged: 0 }),

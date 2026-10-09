@@ -68,6 +68,7 @@ let validateExportFiles: ReturnType<typeof vi.fn>;
 let confirmExport: ReturnType<typeof vi.fn>;
 let ejectDevice: ReturnType<typeof vi.fn>;
 let formatDevice: ReturnType<typeof vi.fn>;
+let estimateSync: ReturnType<typeof vi.fn>;
 let platform: PropertyDescriptor | undefined;
 let progress: ((p: SyncProgress) => void) | null;
 let onClose: ReturnType<typeof vi.fn>;
@@ -108,6 +109,10 @@ beforeEach(async () => {
   importUsb = vi.fn(() => Promise.resolve({ tracks: 2, histories: 0, settings: 0, skipped: 0 }));
   ejectDevice = vi.fn(() => Promise.resolve());
   formatDevice = vi.fn(() => Promise.resolve());
+  estimateSync = vi.fn((_playlists: string[], destinations: string[]) => Promise.resolve(destinations.map((path) => ({
+    path, copyBytes: 2 * 1024 ** 3, reuseBytes: 1024 ** 3, freeBytes: 0, tracksNew: 12, tracksChanged: 1,
+    tracksKept: 30, tracksRemoved: 0, tracksMissing: 0, approximate: false,
+  }))));
   syncDevices = vi.fn((playlists: string[], destinations: string[]) =>
     Promise.resolve(destinations.map((path) => report(path, playlists.length * 10))),
   );
@@ -139,6 +144,7 @@ beforeEach(async () => {
     cancelExport,
     ejectDevice,
     formatDevice,
+    estimateSync,
     onExportProgress: (listener: (progress: ExportProgress) => void) => {
       exportProgress = listener;
       return () => { exportProgress = undefined; };
@@ -191,6 +197,29 @@ describe("SyncManager", () => {
     await act(async () => { await vi.advanceTimersByTimeAsync(2000); });
     await settle();
     expect(sync?.disabled).toBe(false);
+  });
+  it("shows what the ticked playlists would add to a ticked stick, after the selection settles", async () => {
+    vi.useFakeTimers();
+    click(box("Closing"));
+    click(box("USB B"));
+    click(box("Warm Up"));
+    await act(async () => { await vi.advanceTimersByTimeAsync(400); });
+    await settle();
+    expect(estimateSync).toHaveBeenCalledTimes(1);
+    expect(estimateSync.mock.calls[0]?.[1]).toEqual(["/Volumes/USB B"]);
+    expect(host.textContent).toContain("2.0 GB to add");
+    // Used, then the blue segment for what would be added: 2 GB of 32 is 6.25%.
+    const spans = host.querySelectorAll<HTMLElement>('[aria-label="USB B storage used"] > span');
+    expect(spans).toHaveLength(2);
+    expect(spans[1]?.style.width).toBe("6.25%");
+  });
+  it("shows nothing to add until a playlist and a stick are both ticked", async () => {
+    vi.useFakeTimers();
+    click(box("Closing"));
+    await act(async () => { await vi.advanceTimersByTimeAsync(400); });
+    await settle();
+    expect(estimateSync).not.toHaveBeenCalled();
+    expect(host.textContent).not.toContain("to add");
   });
   it("rechecks rekordbox when sync is clicked", async () => {
     click(box("Closing"));

@@ -18,6 +18,7 @@ import { ArrowLeft, ArrowRight, LoaderCircle, Search, X } from "lucide-react";
 
 import { EjectIcon, FolderIcon, ListIcon, SmartListIcon } from "@/components/icons";
 import { getBackend } from "@/ipc/client";
+import type { Device, DeviceSyncState, ExportReport, FormatLayout, ItunesLibrary, MissingExportFile, SyncEstimate, TreeNode } from "@/ipc/types";
 import { formatSpace } from "@/lib/devices";
 import { errorMessage } from "@/lib/errorMessage";
 import { detectPlatform } from "@/lib/shortcuts";
@@ -121,6 +122,7 @@ export function SyncManager({ windowed = false, onClose, onSynced, onReady }: Sy
   const [expandedDevices, setExpandedDevices] = useState<ReadonlySet<string>>(new Set());
   const [deviceErrors, setDeviceErrors] = useState<ReadonlyMap<string, string>>(new Map());
   const [states, setStates] = useState<ReadonlyMap<string, DeviceSyncState>>(new Map());
+  const [estimates, setEstimates] = useState<ReadonlyMap<string, SyncEstimate>>(new Map());
   const [query, setQuery] = useState("");
   const [loadingTree, setLoadingTree] = useState(true);
   const [treeError, setTreeError] = useState("");
@@ -184,6 +186,27 @@ export function SyncManager({ windowed = false, onClose, onSynced, onReady }: Sy
     ? playlists.filter(node => node.name.toLocaleLowerCase().includes(search))
     : visibleNodes(nodes, collapsed), [nodes, playlists, collapsed, search]);
   const selectedCount = playlists.filter(node => ticked.has(node.id)).length;
+  // What the selection would use on each ticked stick, asked for once the
+  // ticking has settled. A key rather than the device list: that is re-read
+  // on a timer and would restart the estimate every time.
+  const estimateDevices = [...tickedDevices].sort().join("\n");
+  const reported = completedReports.size;
+  useEffect(() => {
+    const ids = nodes.filter((n) => isExportablePlaylist(n) && ticked.has(n.id)).map((n) => n.id);
+    const destinations = estimateDevices === "" ? [] : estimateDevices.split("\n");
+    if (ids.length === 0 || destinations.length === 0) {
+      setEstimates(new Map());
+      return;
+    }
+    let live = true;
+    const timer = window.setTimeout(() => {
+      void getBackend()
+        .then((backend) => backend.estimateSync(ids, destinations, deleteUnlistedMusic, compatibilityFormat))
+        .then((found) => { if (live) setEstimates(new Map(found.map((e) => [e.path, e] as const))); })
+        .catch(() => { if (live) setEstimates(new Map()); });
+    }, 300);
+    return () => { live = false; window.clearTimeout(timer); };
+  }, [nodes, ticked, estimateDevices, deleteUnlistedMusic, compatibilityFormat, reported]);
   const playlistCount = selectedCount === 1 ? t("{count} playlist", { count: selectedCount }) : t("{count} playlists", { count: selectedCount });
   const deviceCount = tickedDevices.size === 1 ? t("{count} USB device", { count: tickedDevices.size }) : t("{count} USB devices", { count: tickedDevices.size });
   const selectionSummary = t("{playlists} → {devices}", { playlists: playlistCount, devices: deviceCount });
@@ -564,10 +587,8 @@ export function SyncManager({ windowed = false, onClose, onSynced, onReady }: Sy
         }
         const missing = await backend.validateExportFiles(playlists);
         if (missing.length > 0) {
-          const shown = missing.slice(0, 10).map((file) => `• ${file.title}\n  ${file.path}`).join("\n");
-          const remaining = missing.length > 10 ? `\n${t("…and {count} more missing files.", { count: missing.length - 10 })}` : "";
-          const question = `${t("{count} selected tracks have missing audio files and will be skipped.", { count: missing.length })}\n\n${shown}${remaining}\n\n${t("Continue anyway?")}`;
-          const proceed = await backend.confirm(question, { yes: t("Yes"), no: t("No") });
+          const proceed = await new Promise<boolean>(resolve => setMissingPrompt({ files: missing, resolve }));
+          setMissingPrompt(null);
           if (!proceed) {
             setStatus([t("Export cancelled because files are missing.")]);
             return;
@@ -887,6 +908,19 @@ export function SyncManager({ windowed = false, onClose, onSynced, onReady }: Sy
               const freePercent = device.totalBytes > 0 ? Math.max(0, Math.min(100, device.freeBytes / device.totalBytes * 100)) : null;
               const usedPercent = freePercent === null ? null : 100 - freePercent;
               const used = device.totalBytes > 0 ? formatSpace(Math.max(0, device.totalBytes - device.freeBytes)) || "0.0 GB" : "";
+              // What the ticked playlists would add, net of what the sync
+              // takes off: the stick's own copies are already in "used".
+              const estimate = on ? estimates.get(device.path) : undefined;
+              const adding = estimate ? Math.max(0, estimate.copyBytes - estimate.freeBytes) : 0;
+              const freeing = estimate ? Math.max(0, estimate.freeBytes - estimate.copyBytes) : 0;
+              const addPercent = usedPercent !== null && device.totalBytes > 0 ? Math.min(100 - usedPercent, adding / device.totalBytes * 100) : 0;
+              const overBy = adding - device.freeBytes;
+              const approx = estimate?.approximate ? "~" : "";
+              const estimateTitle = estimate ? [
+                t("{count} tracks to copy ({size})", { count: estimate.tracksNew + estimate.tracksChanged, size: formatSpace(estimate.copyBytes) || "0 MB" }),
+                t("{count} already on the stick ({size})", { count: estimate.tracksKept, size: formatSpace(estimate.reuseBytes) || "0 MB" }),
+                t("{count} to remove ({size})", { count: estimate.tracksRemoved, size: formatSpace(estimate.freeBytes) || "0 MB" }),
+              ].join("\n") : undefined;
               return <div key={device.path} className={styles.device} role="treeitem" aria-expanded={expanded} data-ticked={on || undefined}>
                 <div className={styles.row}>
                   <button type="button" className={styles.twisty} data-open={expanded ? "" : undefined}
@@ -912,10 +946,18 @@ export function SyncManager({ windowed = false, onClose, onSynced, onReady }: Sy
                   <div className={styles.spaceBar} role={freePercent === null ? "img" : "meter"}
                     aria-label={`${device.name} storage used`} aria-valuemin={usedPercent === null ? undefined : 0}
                     aria-valuemax={usedPercent === null ? undefined : 100} aria-valuenow={usedPercent ?? undefined}
-                    aria-valuetext={usedPercent === null ? "Space unknown" : `${used} used; ${free}`} title={free}>
+                    aria-valuetext={usedPercent === null ? "Space unknown" : `${used} used; ${free}${adding > 0 ? `; ${approx}${formatSpace(adding)} to add` : ""}`} title={estimateTitle ? `${free}\n${estimateTitle}` : free}>
                     {usedPercent !== null ? <span style={{ width: `${usedPercent}%` }} /> : null}
+                    {addPercent > 0 ? <span className={styles.pending} data-over={overBy > 0 || undefined} style={{ width: `${addPercent}%` }} /> : null}
                   </div>
-                  <div className={styles.storageLabels}>{usedPercent !== null ? <span><i aria-hidden="true" />{used} used</span> : null}<span>{free}</span></div>
+                  <div className={styles.storageLabels}>
+                    {usedPercent !== null ? <span><i aria-hidden="true" />{used} used</span> : null}
+                    {adding > 0 ? <span className={styles.pendingLabel} data-over={overBy > 0 || undefined}><i aria-hidden="true" />{overBy > 0
+                      ? t("{size} to add, {over} more than fits", { size: `${approx}${formatSpace(adding)}`, over: formatSpace(overBy) })
+                      : t("{size} to add", { size: `${approx}${formatSpace(adding)}` })}</span> : null}
+                    {adding === 0 && freeing > 0 ? <span>{t("Frees {size}", { size: formatSpace(freeing) })}</span> : null}
+                    <span>{free}</span>
+                  </div>
                   {job ? <div className={styles.exportProgress} data-state={job.state}>
                     <progress data-state={job.state} aria-label={`Exporting ${device.name}`} max={100} value={exportPercent(job)} />
                     <span>{job.state === "cancelled" ? "Export stopped" : job.state === "failed" ? "Export failed" : job.state === "done" ? "Export complete" : job.state === "preparing" ? "Preparing for export" : job.state === "checking" ? `Checking — ${job.title || device.name}` : job.state === "database" ? "Building databases" : job.state === "verifying" ? "Verifying databases" : job.state === "publishing" ? "Publishing safely" : job.state === "ejecting" ? `Ejecting ${device.name}` : `Exporting — ${job.title || device.name}`} ({exportPercent(job)}%)</span>

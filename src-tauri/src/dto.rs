@@ -408,6 +408,26 @@ pub struct ExportReportDto {
 
 /// What one destination got out of a sync: its report, or why it got none.
 ///
+/// What a sync would use and give back on one stick, before it is run.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SyncEstimateDto {
+    pub path: String,
+    /// Bytes of tracks that would be copied: new, or changed since written.
+    pub copy_bytes: u64,
+    /// Bytes of tracks the stick already holds and the sync leaves alone.
+    pub reuse_bytes: u64,
+    /// Bytes of audio the sync would remove from the stick.
+    pub free_bytes: u64,
+    pub tracks_new: usize,
+    pub tracks_changed: usize,
+    pub tracks_kept: usize,
+    pub tracks_removed: usize,
+    pub tracks_missing: usize,
+    /// Some copied tracks would be converted, so their size is a guess.
+    pub approximate: bool,
+}
+
 /// A stick that fails must not stop the others, so the outcome is per stick
 /// rather than one error for the run.
 #[derive(Debug, Clone, Serialize)]

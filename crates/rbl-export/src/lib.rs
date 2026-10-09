@@ -12,6 +12,7 @@
 //! index and writes only under the destination directory.
 
 pub mod device_library;
+pub mod estimate;
 pub mod ext_pdb;
 pub mod manifest;
 pub mod sync_record;

@@ -1116,6 +1116,49 @@ fn sync_one_device<R: tauri::Runtime>(
     }
 }
 
+/// What syncing `playlists` would use and give back on each stick, from the
+/// record each one holds. Writes nothing to a stick or the library.
+#[tauri::command]
+pub async fn estimate_sync(
+    state: State<'_, Arc<AppState>>,
+    playlists: Vec<String>,
+    destinations: Vec<String>,
+    delete_unlisted_music: Option<bool>,
+    compatibility_format: Option<rbl_export::CompatibilityFormat>,
+) -> AppResult<Vec<crate::dto::SyncEstimateDto>> {
+    let library = state.library()?;
+    let share = state.share_root();
+    let state = Arc::clone(&state);
+    blocking("estimate_sync", move || {
+        let selection = ExportSelection::from_playlists(&state, &library, &share, &playlists, false)?;
+        Ok(destinations
+            .into_iter()
+            .map(|path| {
+                let found = rbl_export::estimate::estimate(
+                    std::path::Path::new(&path),
+                    selection.sync.db_id,
+                    &selection.tracks,
+                    delete_unlisted_music.unwrap_or(false),
+                    compatibility_format,
+                );
+                crate::dto::SyncEstimateDto {
+                    path,
+                    copy_bytes: found.copy_bytes,
+                    reuse_bytes: found.reuse_bytes,
+                    free_bytes: found.free_bytes,
+                    tracks_new: found.tracks_new,
+                    tracks_changed: found.tracks_changed,
+                    tracks_kept: found.tracks_kept,
+                    tracks_removed: found.tracks_removed,
+                    tracks_missing: found.tracks_missing,
+                    approximate: found.approximate,
+                }
+            })
+            .collect())
+    })
+    .await
+}
+
 /// Export Track: puts tracks on a stick on their own, in no playlist,
 /// beside what the stick's record says it holds — its playlists, synced
 /// again from the library, and the tracks put there this way before.
@@ -2993,6 +3036,7 @@ pub async fn create_playlist<R: tauri::Runtime>(
     state: State<'_, Arc<AppState>>,
     name: String,
     parent: String,
+    index: Option<usize>,
 ) -> AppResult<u32> {
     edit(app, state, "create_playlist", Touched::Playlists, move |w| {
         let id = w.create_playlist(&name, &parent)?;
@@ -3028,7 +3072,6 @@ fn rule_to_dto(rule: &rbl_index::SmartRule) -> AppResult<SmartRuleDto> {
     use rbl_index::smart::{Item, Logic};
     let mut conditions = Vec::with_capacity(rule.root.items.len());
     for item in &rule.root.items {
-    index: Option<usize>,
         match item {
             Item::Condition(c) => conditions.push(SmartConditionDto {
                 property: c.property.name().to_owned(),

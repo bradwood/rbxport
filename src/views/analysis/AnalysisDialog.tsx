@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { AnalysisSettings } from "@/ipc/types";
 import { useTranslation } from "@/i18n";
 import type { AnalysisMode } from "@/lib/preferences";
+import { lastAnalysisChoice, rememberAnalysisChoice } from "@/lib/analysisChoice";
 import styles from "./AnalysisDialog.module.css";
 
 export type AnalysisChoice = AnalysisSettings & { mode: AnalysisMode };
@@ -25,9 +26,12 @@ export function AnalysisDialog({ count, auto = false, initialMode, initialFirstB
   onConfirm: (settings: AnalysisChoice) => void;
   onCancel: () => void;
 }) {
+  // The launch prompt always starts from its defaults; Analyze Track starts
+  // from what it was last confirmed with.
   const [settings, setSettings] = useState<AnalysisChoice>(() => ({
     mode: initialMode, bpmGrid: true, key: true, highPrecision: true, minBpm: 70, maxBpm: 180,
     firstBeatCue: initialFirstBeatCue,
+    ...(auto ? {} : lastAnalysisChoice()),
   }));
   const dialog = useRef<HTMLDialogElement>(null);
   useEffect(() => {
@@ -47,7 +51,7 @@ export function AnalysisDialog({ count, auto = false, initialMode, initialFirstB
     <dialog ref={dialog} className={styles.dialog} aria-labelledby="analysis-title"
       onCancel={event => { event.preventDefault(); onCancel(); }}
       onKeyDown={event => event.stopPropagation()}>
-      <form onSubmit={event => { event.preventDefault(); if (canAnalyse) onConfirm(settings); }}>
+      <form onSubmit={event => { event.preventDefault(); if (!canAnalyse) return; if (!auto) rememberAnalysisChoice(settings); onConfirm(settings); }}>
         <h2 id="analysis-title" className={styles.title}>{t("Analysis Setting")}</h2>
         {auto ? null : (
           <p className={styles.selection}>{count} {count === 1 ? t("track selected") : t("tracks selected")}</p>

@@ -791,6 +791,7 @@ export function createMockBackend(options: MockOptions = {}): Backend {
   // rekordbox's, so it holds playlists but remembers no selection of ours;
   // DJ STICK holds nothing until something is written to it.
   const syncSelections = new Map<string, SyncPlaylist[]>();
+  const formattedAs = new Map<string, string>();
   const looseTracks = new Map<string, Set<string>>();
   /** Sticks whose record asks to be synced again when plugged in. */
   const autoSync = new Set<string>();
@@ -2082,6 +2083,16 @@ export function createMockBackend(options: MockOptions = {}): Backend {
         onDevice: [...(deviceLibraries.get(path) ?? [])],
         libraries: ["Device Library", "OneLibrary"].map(name => ({ name, nodes: (deviceLibraries.get(path) ?? []).map((name, i) => ({ id: String(i+1), parentId: "0", name, folder: false })) })),
         automatic: autoSync.has(path),
+    formatDevice: async (path, layout) => {
+      const device = devices.find(d => d.path === path);
+      if (!device) throw new Error("That device is no longer connected.");
+      formattedAs.set(path, layout === "fat32" ? "FAT32" : "FAT32 + HFS+");
+      device.freeBytes = device.totalBytes;
+      device.export = null;
+      deviceLibraries.delete(path);
+      syncSelections.delete(path);
+      await wait(undefined);
+    },
       });
     },
     onSyncProgress: (listener) => {
@@ -2093,7 +2104,7 @@ export function createMockBackend(options: MockOptions = {}): Backend {
 
     // One device, so the panel has something to show. A browser cannot see a
     // real volume; the app asks the OS.
-    listDevices: () => wait(devices.map((device) => ({ ...device, fileSystem: "FAT32" }))),
+    listDevices: () => wait(devices.map((device) => ({ ...device, fileSystem: formattedAs.get(device.path) ?? "FAT32" }))),
     onImportProgress: (listener) => { importListeners.add(listener); return () => { importListeners.delete(listener); }; },
     onExportProgress: (listener) => { exportListeners.add(listener); return () => { exportListeners.delete(listener); }; },
     exportProgress: () => wait([...exportJobs.values()]),

@@ -20,6 +20,7 @@ The [manifest](Cargo.toml) lists dependencies and feature flags.
 | [`settings.rs`](src/settings.rs) | Device settings. |
 | [`explorer.rs`](src/explorer.rs) | Device browsing. |
 | [`eject.rs`](src/eject.rs) | Platform eject operations. |
+| [`format.rs`](src/format.rs) | Erases a whole stick and formats it as FAT32, or FAT32 plus HFS+ (macOS). |
 
 ## Contracts and safety
 

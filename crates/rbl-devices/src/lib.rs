@@ -17,6 +17,7 @@ pub mod settings;
 pub mod explorer;
 pub mod mounts;
 pub mod eject;
+pub mod format;
 pub mod libraries;
 
 pub use mounts::MountWatcher;

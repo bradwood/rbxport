@@ -877,6 +877,13 @@ export interface Backend {
   /** Safely eject a mounted USB device; fails if it is in use. */
   ejectDevice(path: string): Promise<void>;
 
+  /**
+   * Erases every partition on the stick, then formats it as one FAT32
+   * partition, or a FAT32 and an HFS+ one, keeping its name. Fails if it is
+   * in use.
+   */
+  formatDevice(path: string, layout: FormatLayout): Promise<void>;
+
   /** What a stick was last synced with, and what it holds now. */
   deviceSyncState(path: string): Promise<DeviceSyncState>;
   /**
@@ -1268,6 +1275,9 @@ export interface ExportReport {
 }
 
 /** What one destination got out of a sync: its report, or why it got none. */
+/** How a stick is laid out by `formatDevice`. */
+export type FormatLayout = "fat32" | "fat32AndHfsPlus";
+
 export interface SyncDeviceReport {
   ejected?: boolean;
   ejectError?: string;

@@ -510,6 +510,7 @@ async function realBackend(): Promise<Backend> {
     validateExportFiles: (playlists) => invoke<MissingExportFile[]>("validate_export_files", { playlists }),
     importUsb: (path, cues, history, settings) => invoke("import_usb", { path, cues, history, settings }),
     ejectDevice: (path) => invoke<void>("eject_device", { path }),
+    formatDevice: (path, layout) => invoke<void>("format_device", { path, layout }),
     deviceSyncState: (path) => invoke<DeviceSyncState>("device_sync_state", { path }),
     smartRule: (playlist) => invoke<SmartRule>("smart_rule", { playlist }),
     onSyncProgress: (listener) => subscribe<SyncProgress>("sync:progress", listener),

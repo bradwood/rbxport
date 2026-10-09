@@ -585,6 +585,7 @@ pub fn run() {
             commands::sync_devices,
             commands::validate_export_files,
             commands::eject_device,
+            commands::format_device,
             commands::export_tracks_to_device,
             commands::device_sync_state,
             usb_import::import_usb,

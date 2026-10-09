@@ -1617,6 +1617,34 @@ pub async fn eject_device(path: String) -> AppResult<()> {
     }).await
 }
 
+/// How `format_device` lays the stick out.
+#[derive(serde::Deserialize, Clone, Copy)]
+#[serde(rename_all = "camelCase")]
+pub enum FormatLayout {
+    Fat32,
+    Fat32AndHfsPlus,
+}
+
+/// Erases every partition on the stick at `path` and formats it, keeping its name.
+#[tauri::command]
+pub async fn format_device(path: String, layout: FormatLayout) -> AppResult<()> {
+    blocking("format_device", move || {
+        // Keep new exports from starting until the stick has been formatted.
+        let jobs = EXPORT_PROGRESS.lock().map_err(|e| AppError::internal(e.to_string()))?;
+        if jobs.get(&path).is_some_and(|job| job.state == "writing") {
+            return Err(AppError::internal("This device is being exported to. Wait for the export to finish."));
+        }
+        let layout = match layout {
+            FormatLayout::Fat32 => rbl_devices::format::Layout::Fat32,
+            FormatLayout::Fat32AndHfsPlus => rbl_devices::format::Layout::Fat32AndHfsPlus,
+        };
+        let result = rbl_devices::format::format(std::path::Path::new(&path), layout)
+            .map_err(|e| AppError::internal(e.to_string()));
+        drop(jobs);
+        result
+    }).await
+}
+
 /// An export that failed because the USB went away mid-way says so: the
 /// error the file system gave ("Device not configured", "Input/output
 /// error", "No such file or directory") names a file, not the cause. What

@@ -16,17 +16,20 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, ArrowRight, LoaderCircle, Search, X } from "lucide-react";
 
+import { ContextMenu } from "@/components/ContextMenu";
 import { EjectIcon, FolderIcon, ListIcon, SmartListIcon } from "@/components/icons";
 import { getBackend } from "@/ipc/client";
-import type { Device, DeviceSyncState, ExportReport, ItunesLibrary, TreeNode } from "@/ipc/types";
+import type { Device, DeviceSyncState, ExportReport, FormatLayout, ItunesLibrary, TreeNode } from "@/ipc/types";
 import { formatSpace } from "@/lib/devices";
 import { errorMessage } from "@/lib/errorMessage";
+import { detectPlatform } from "@/lib/shortcuts";
 import { askToReplaceLists } from "@/lib/xmlImport";
 import { nodesForSource, subtreeIds, toggle, visibleNodes } from "@/lib/tree";
 import { startWindowDrag, toggleWindowMaximise } from "@/lib/windowDrag";
 import { usePreferences } from "@/store/usePreferences";
 import { useExportProgress, exportPercent } from "@/store/useExportProgress";
 import { StopExport } from "@/components/StopExport";
+import { FormatDeviceDialog } from "./FormatDeviceDialog";
 import { useTranslation } from "@/i18n";
 import styles from "./SyncManager.module.css";
 
@@ -130,7 +133,7 @@ export function SyncManager({ windowed = false, onClose, onSynced, onReady }: Sy
   // of rekordbox's process lock instead of relying on the main window.
   // Unknown is locked: do not briefly enable SYNC before the first check.
   const [rekordboxOpen, setRekordboxOpen] = useState<boolean | null>(null);
-  const [operation, setOperation] = useState<"sync" | "import" | "eject" | "itunes" | null>(null);
+  const [operation, setOperation] = useState<"sync" | "import" | "eject" | "format" | "itunes" | null>(null);
   // The iTunes / Music library shown in the left column, its ticks, and which
   // of its folders are closed. Null until the auto-detect answers, or when no
   // shared Library.xml is found and the DJ has not chosen one.
@@ -140,6 +143,8 @@ export function SyncManager({ windowed = false, onClose, onSynced, onReady }: Sy
   const [itunesLoading, setItunesLoading] = useState(true);
   const [itunesError, setItunesError] = useState("");
   const [ejectingPath, setEjectingPath] = useState<string | null>(null);
+  const [deviceMenu, setDeviceMenu] = useState<{ device: Device; x: number; y: number } | null>(null);
+  const [formatTarget, setFormatTarget] = useState<Device | null>(null);
   const busy = operation !== null || [...exportJobs.values()].some(job => ["preparing", "checking", "copying", "database", "verifying", "publishing", "ejecting"].includes(job.state));
   const [ejectAfterSync, setEjectAfterSync] = useState(false);
   /** What is happening now, or what happened: one line, or one per stick. */
@@ -476,6 +481,35 @@ export function SyncManager({ windowed = false, onClose, onSynced, onReady }: Sy
   }, [itunes, canImportItunes, itunesNodes, itunesTicked, t]);
 
   const canSync = rekordboxOpen === false && selectedCount > 0 && tickedDevices.size > 0 && !busy && !loadingDevices;
+
+  /** Formatting needs diskutil, so only macOS offers it. */
+  const canFormat = useMemo(() => detectPlatform().mac, []);
+
+  /** Rejects with the failure, so the dialog that asked can show it. */
+  const formatDevice = async (device: Device, layout: FormatLayout) => {
+    setOperation("format");
+    setStatus([t("Formatting {device}…", { device: device.name })]);
+    try {
+      const backend = await getBackend();
+      await backend.formatDevice(device.path, layout);
+      // A FAT volume comes back upper-cased, so it may mount somewhere new:
+      // what was read from the old path is gone either way.
+      const forget = <T,>(current: ReadonlyMap<string, T>) => { const next = new Map(current); next.delete(device.path); return next; };
+      setTickedDevices(current => new Set([...current].filter(path => path !== device.path)));
+      setExpandedDevices(current => new Set([...current].filter(path => path !== device.path)));
+      setStates(forget);
+      setDeviceErrors(forget);
+      setCompletedReports(forget);
+      await refreshDevices().catch(() => {});
+      setStatus([t("{device}: Formatted.", { device: device.name })]);
+      onSynced?.();
+    } catch (e) {
+      setStatus([t("{device}: Could not format. {reason}", { device: device.name, reason: errorMessage(e) })]);
+      throw e;
+    } finally {
+      setOperation(null);
+    }
+  };
 
   const ejectDevice = async (device: Device) => {
     if (busy || loadingDevices) return;
@@ -855,7 +889,10 @@ export function SyncManager({ windowed = false, onClose, onSynced, onReady }: Sy
               const usedPercent = freePercent === null ? null : 100 - freePercent;
               const used = device.totalBytes > 0 ? formatSpace(Math.max(0, device.totalBytes - device.freeBytes)) || "0.0 GB" : "";
               return <div key={device.path} className={styles.device} role="treeitem" aria-expanded={expanded} data-ticked={on || undefined}>
-                <div className={styles.row}>
+                <div className={styles.row} onContextMenu={canFormat ? (event) => {
+                  event.preventDefault();
+                  if (!busy && !loadingDevices) setDeviceMenu({ device, x: event.clientX, y: event.clientY });
+                } : undefined}>
                   <button type="button" className={styles.twisty} data-open={expanded ? "" : undefined}
                     aria-label={`${expanded ? "Collapse" : "Expand"} ${device.name}`} disabled={busy} onClick={() => {
                       setExpandedDevices(current => toggle(current, device.path));
@@ -933,11 +970,31 @@ export function SyncManager({ windowed = false, onClose, onSynced, onReady }: Sy
     </div>
   );
 
-  if (windowed) return body;
+  const dialogs = <>
+    {deviceMenu ? <ContextMenu
+      x={deviceMenu.x}
+      y={deviceMenu.y}
+      rows={[{ label: t("Format USB…"), action: "format" }]}
+      context={{ inPlaylist: false, hasFile: false, readOnly: false }}
+      label={deviceMenu.device.name}
+      onChoose={() => setFormatTarget(deviceMenu.device)}
+      onClose={() => setDeviceMenu(null)}
+    /> : null}
+    {formatTarget ? <FormatDeviceDialog
+      device={formatTarget}
+      onFormat={layout => formatDevice(formatTarget, layout)}
+      onClose={() => setFormatTarget(null)}
+    /> : null}
+  </>;
+
+  if (windowed) return <>{body}{dialogs}</>;
   return (
-    <div className={styles.backdrop} onMouseDown={onClose} role="presentation">
-      {body}
-    </div>
+    <>
+      <div className={styles.backdrop} onMouseDown={onClose} role="presentation">
+        {body}
+      </div>
+      {dialogs}
+    </>
   );
 }
 

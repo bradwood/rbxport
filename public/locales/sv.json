@@ -1532,5 +1532,18 @@
   "No playlist was made.": "No playlist was made.",
   "No playlist was made: the folders hold no audio files.": "No playlist was made: the folders hold no audio files.",
   "One or several lists with the same name already exist.": "Minst en spellista med samma namn finns redan.",
-  "{count} files skipped.": "{count} files skipped."
+  "{count} files skipped.": "{count} files skipped.",
+  "Format USB": "Format USB",
+  "Format USB…": "Format USB…",
+  "Format": "Format",
+  "FAT32": "FAT32",
+  "FAT32 and HFS+": "FAT32 and HFS+",
+  "Works on Mac, Windows, Linux and CDJs.": "Works on Mac, Windows, Linux and CDJs.",
+  "Two partitions of equal size: FAT32 for players and PCs, HFS+ for Mac.": "Two partitions of equal size: FAT32 for players and PCs, HFS+ for Mac.",
+  "The whole USB stick will be completely erased, including all of its partitions. Everything on it will be lost. This cannot be undone.": "The whole USB stick will be completely erased, including all of its partitions. Everything on it will be lost. This cannot be undone.",
+  "Erase and Format": "Erase and Format",
+  "Formatting…": "Formatting…",
+  "Formatting {device}…": "Formatting {device}…",
+  "{device}: Formatted.": "{device}: Formatted.",
+  "{device}: Could not format. {reason}": "{device}: Could not format. {reason}"
 }

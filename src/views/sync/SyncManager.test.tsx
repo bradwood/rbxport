@@ -67,6 +67,8 @@ let syncDevices: ReturnType<typeof vi.fn>;
 let validateExportFiles: ReturnType<typeof vi.fn>;
 let confirmExport: ReturnType<typeof vi.fn>;
 let ejectDevice: ReturnType<typeof vi.fn>;
+let formatDevice: ReturnType<typeof vi.fn>;
+let platform: PropertyDescriptor | undefined;
 let progress: ((p: SyncProgress) => void) | null;
 let onClose: ReturnType<typeof vi.fn>;
 let rekordboxOpen: boolean;
@@ -88,6 +90,11 @@ const click = (el: HTMLElement | null | undefined) => {
 const status = () => host.querySelector('[role="status"]')?.textContent ?? "";
 
 beforeEach(async () => {
+  // Formatting is offered on macOS only.
+  platform = Object.getOwnPropertyDescriptor(navigator, "platform");
+  Object.defineProperty(navigator, "platform", { configurable: true, value: "MacIntel" });
+  HTMLDialogElement.prototype.showModal = vi.fn();
+  HTMLDialogElement.prototype.close = vi.fn();
   cancelExport.mockClear();
   devicesChanged = undefined;
   libraryChanged = undefined;
@@ -100,6 +107,7 @@ beforeEach(async () => {
   onClose = vi.fn();
   importUsb = vi.fn(() => Promise.resolve({ tracks: 2, histories: 0, settings: 0, skipped: 0 }));
   ejectDevice = vi.fn(() => Promise.resolve());
+  formatDevice = vi.fn(() => Promise.resolve());
   syncDevices = vi.fn((playlists: string[], destinations: string[]) =>
     Promise.resolve(destinations.map((path) => report(path, playlists.length * 10))),
   );
@@ -130,6 +138,7 @@ beforeEach(async () => {
     validateExportFiles,
     cancelExport,
     ejectDevice,
+    formatDevice,
     onExportProgress: (listener: (progress: ExportProgress) => void) => {
       exportProgress = listener;
       return () => { exportProgress = undefined; };
@@ -154,6 +163,8 @@ beforeEach(async () => {
 });
 
 afterEach(() => {
+  if (platform) Object.defineProperty(navigator, "platform", platform);
+  else Reflect.deleteProperty(navigator, "platform");
   vi.useRealTimers();
   act(() => root.unmount());
   host.remove();
@@ -271,6 +282,61 @@ describe("SyncManager", () => {
     expect(status()).toContain("Could not eject. Device is busy.");
     expect(box("USB B")).not.toBeNull();
     expect(host.querySelector('button[aria-label="Eject USB B"]')).toHaveProperty("disabled", false);
+  });
+
+  const rightClick = (el: Element | null) => {
+    if (!el) throw new Error("nothing to right-click");
+    act(() => { el.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 10, clientY: 10 })); });
+  };
+  const openFormat = (name: string) => {
+    rightClick(box(name)?.closest("div") ?? null);
+    click(document.body.querySelector<HTMLElement>('[role="menuitem"]'));
+  };
+  const dialog = () => document.body.querySelector("dialog");
+
+  it("formats a drive from its right-click menu after warning that everything is erased", async () => {
+    openFormat("USB A");
+    expect(dialog()?.textContent).toContain("completely erased");
+    expect(dialog()?.textContent).toContain("all of its partitions");
+    expect(dialog()?.textContent).toContain("USB A");
+    expect(formatDevice).not.toHaveBeenCalled();
+    click(box("USB A"));
+    const choose = (text: string) => [...document.body.querySelectorAll<HTMLInputElement>('dialog input[type="radio"]')]
+      .find(input => input.closest("label")?.textContent?.startsWith(text));
+    click(choose("FAT32 and HFS+"));
+    click([...document.body.querySelectorAll<HTMLButtonElement>("dialog button")].find(b => b.textContent === "Erase and Format"));
+    await settle();
+    expect(formatDevice).toHaveBeenCalledWith("/Volumes/USB A", "fat32AndHfsPlus");
+    expect(dialog()).toBeNull();
+    expect(status()).toBe("USB A: Formatted.");
+    expect(box("USB A")?.checked).toBe(false);
+  });
+
+  it("formats as plain FAT32 by default and can be cancelled without touching the drive", async () => {
+    openFormat("USB B");
+    click([...document.body.querySelectorAll<HTMLButtonElement>("dialog button")].find(b => b.textContent === "Cancel"));
+    expect(dialog()).toBeNull();
+    expect(formatDevice).not.toHaveBeenCalled();
+    openFormat("USB B");
+    click([...document.body.querySelectorAll<HTMLButtonElement>("dialog button")].find(b => b.textContent === "Erase and Format"));
+    await settle();
+    expect(formatDevice).toHaveBeenCalledWith("/Volumes/USB B", "fat32");
+  });
+
+  it("keeps the dialog open and says why when formatting fails", async () => {
+    formatDevice.mockRejectedValueOnce({ kind: "internal", message: "Device is busy." });
+    openFormat("USB B");
+    click([...document.body.querySelectorAll<HTMLButtonElement>("dialog button")].find(b => b.textContent === "Erase and Format"));
+    await settle();
+    expect(dialog()?.textContent).toContain("Device is busy.");
+    expect(status()).toContain("Could not format. Device is busy.");
+    expect(box("USB B")).not.toBeNull();
+  });
+
+  it("offers no format menu while an export is running", () => {
+    act(() => exportProgress?.({ path: "/Volumes/USB B", state: "copying", done: 1, total: 10, title: "Track" }));
+    rightClick(box("USB B")?.closest("div") ?? null);
+    expect(document.body.querySelector('[role="menu"]')).toBeNull();
   });
 
   it("prevents manual ejection while an export is running in the background", () => {

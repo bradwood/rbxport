@@ -2841,6 +2841,7 @@ export const Player = memo(function Player({
           <div className={styles.cueList}>
             {PADS.map((letter) => {
               const cue = hot.at(letter);
+              const movable = cue !== null && hot.canEdit && cue.id !== "";
               return (
                 <div
                   key={letter}
@@ -2850,7 +2851,6 @@ export const Player = memo(function Player({
                   aria-label={`Hot cue ${letter}`}
                   aria-disabled={cue ? undefined : true}
                   data-empty={cue ? undefined : ""}
-                  onClick={() => hot.press(letter)}
                   data-dragging={dragSlot === letter ? "" : undefined}
                   data-drop={dragSlot !== null && dropSlot === letter && dragSlot !== letter ? "" : undefined}
                   draggable={movable}
@@ -2872,6 +2872,7 @@ export const Player = memo(function Player({
                     setDragSlot(null);
                     setDropSlot(null);
                   } : undefined}
+                  onClick={() => hot.press(letter)}
                   onContextMenu={cue ? (event) => {
                     event.preventDefault(); event.stopPropagation();
                     setCueColorMenu({x: event.clientX, y: event.clientY, cue});

@@ -1228,23 +1228,30 @@ fn a_cue_moves_and_soft_deletes() {
 }
 
 #[test]
-fn a_hot_cue_moves_to_a_free_slot_and_swaps_with_an_occupied_one() {
+fn a_hot_cue_moves_to_a_slot_and_the_cues_between_shift_over() {
     let mut f = fixture();
     let a = f.writer.add_cue(&track_id(0), 1, 1_000).unwrap();
+    let b = f.writer.add_cue(&track_id(0), 2, 2_000).unwrap();
     let c = f.writer.add_cue(&track_id(0), 3, 3_000).unwrap();
-    let other = f.writer.add_cue(&track_id(1), 6, 9_000).unwrap();
-    let kind = |f: &Fixture, id: &str| -> i64 { f.one("SELECT Kind FROM djmdCue WHERE ID = ?1", &[&id]) };
+    let d = f.writer.add_cue(&track_id(0), 5, 4_000).unwrap();
+    let other = f.writer.add_cue(&track_id(1), 1, 9_000).unwrap();
+    let kinds = |f: &Fixture| -> Vec<i64> {
+        [&a, &b, &c, &d].iter().map(|id| f.one("SELECT Kind FROM djmdCue WHERE ID = ?1", &[id])).collect()
+    };
 
-    // To a free slot (E is kind 6, on this track).
-    f.writer.move_hot_cue(&a, 6).unwrap();
-    assert_eq!(kind(&f, &a), 6);
-    // Onto an occupied one: C and E trade places, and another track's E is left alone.
-    f.writer.move_hot_cue(&c, 6).unwrap();
-    assert_eq!((kind(&f, &c), kind(&f, &a)), (6, 3));
-    assert_eq!(kind(&f, &other), 6);
+    // C to the front: A and B each move down one slot, D stays.
+    f.writer.move_hot_cue(&c, 1).unwrap();
+    assert_eq!(kinds(&f), [2, 3, 1, 5]);
+    // The front cue to the end of the run: everything between moves up one.
+    f.writer.move_hot_cue(&c, 5).unwrap();
+    assert_eq!(kinds(&f), [1, 2, 5, 3]);
+    // Another track's cue is never touched.
+    let theirs: i64 = f.one("SELECT Kind FROM djmdCue WHERE ID = ?1", &[&other]);
+    assert_eq!(theirs, 1);
     // Onto its own slot: nothing changes.
-    f.writer.move_hot_cue(&c, 6).unwrap();
-    assert_eq!(kind(&f, &c), 6);
+    let before = kinds(&f);
+    f.writer.move_hot_cue(&c, 5).unwrap();
+    assert_eq!(kinds(&f), before);
 }
 
 #[test]

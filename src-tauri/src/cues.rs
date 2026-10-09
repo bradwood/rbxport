@@ -74,7 +74,7 @@ pub enum CueEdit {
     Add { track: String, kind: CueKind, position_ms: u32 },
     AddLoop { track: String, kind: CueKind, in_ms: u32, out_ms: u32, beats: u16 },
     Move { cue: String, position_ms: u32 },
-    /// A hot cue to another pad slot, swapping with the cue there.
+    /// A hot cue to another pad slot, the cues between the two shifting over.
     Slot { cue: String, kind: CueKind },
     Colour { cue: String, colour: Option<u8> },
     Comment { cue: String, comment: String },
@@ -228,7 +228,7 @@ pub async fn move_cue<R: tauri::Runtime>(
     edit_cues(app, state, "move_cue", CueEdit::Move { cue, position_ms }).await.map(|_| ())
 }
 
-/// Moves a hot cue to another pad slot, swapping with the cue already there.
+/// Moves a hot cue to another pad slot, shifting the cues between the two by one.
 #[tauri::command]
 pub async fn move_hot_cue<R: tauri::Runtime>(
     app: tauri::AppHandle<R>, state: State<'_, Arc<AppState>>, cue: String, kind: CueKind,

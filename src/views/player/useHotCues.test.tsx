@@ -337,7 +337,7 @@ describe("what the deck is told when a write fails", () => {
 });
 
 describe("dragging a cue to another slot", () => {
-  it("moves the cue by its id, to an empty slot or onto a set one", async () => {
+  it("moves the cue by its id, to an empty slot or a set one", async () => {
     mount({ cues: [hot("7", "A", 1000), hot("8", "C", 3000)] });
     act(() => pads.move("A", "B"));
     act(() => pads.move("A", "C"));

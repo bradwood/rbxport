@@ -1268,8 +1268,16 @@ export function createMockBackend(options: MockOptions = {}): Backend {
       const found = findCue(cue);
       if (!found) return notFound(`no cue ${cue}`);
       if (found.cue.memory) return refuse("A memory cue has no hot cue slot.");
-      const occupant = cuesOf(found.track).find((c) => !c.memory && c.letter === letter && c !== found.cue);
-      if (occupant) occupant.letter = found.cue.letter;
+      // The cues between the two slots slide one toward the slot this one
+      // leaves, as dragging a row in a list does.
+      const from = found.cue.letter.charCodeAt(0);
+      const to = letter.charCodeAt(0);
+      for (const other of cuesOf(found.track)) {
+        if (other.memory || other === found.cue) continue;
+        const at = other.letter.charCodeAt(0);
+        if (from < to && at > from && at <= to) other.letter = String.fromCharCode(at - 1);
+        else if (from > to && at >= to && at < from) other.letter = String.fromCharCode(at + 1);
+      }
       found.cue.letter = letter;
       return cuesChanged(found.track, undefined);
     },

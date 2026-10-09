@@ -1724,48 +1724,70 @@ impl Writer {
         Ok(Changed { rows, usn })
     }
 
-    /// Moves a hot cue to another pad slot, swapping with whatever is there.
+    /// Moves a hot cue to another pad slot, shifting the cues between the two
+    /// slots by one to make room, as dragging a row in a list does.
     ///
     /// `kind` is the slot's `djmdCue.Kind`, as for [`Writer::add_cue`]. A
-    /// slot is only the cue's `Kind`, so a move rewrites that column; when
-    /// the target slot already holds a cue, that cue takes the slot this one
-    /// leaves, in the same transaction. Memory cues have no slot and are
-    /// refused. rekordbox's own window offering this has not been observed
+    /// slot is only the cue's `Kind`, so a move rewrites that column: moving
+    /// the cue from slot C up to A makes A's cue B's slot and B's cue C's,
+    /// all in one transaction. Memory cues have no slot and are refused.
+    /// rekordbox's own window offering this has not been observed
     /// [UNKNOWN]; the rows written are ones rekordbox itself writes.
     pub fn move_hot_cue(&mut self, cue: &str, kind: u8) -> Result<Changed> {
-        if kind == 0 || kind == 4 || kind > 17 {
+        // The slots in pad order: A to C are Kind 1 to 3, D onward 5 to 17.
+        const SLOTS: [i64; 16] = [1, 2, 3, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17];
+        let slot_of = |kind: i64| SLOTS.iter().position(|&k| k == kind);
+        let Some(to) = slot_of(i64::from(kind)) else {
             return Err(DbError::WriteRefused(format!("{kind} is not a hot cue slot rekordbox has")));
-        }
+        };
         self.prepare()?;
         let stamp = time::now();
         let tx = self.library.connection_mut()
             .transaction_with_behavior(TransactionBehavior::Immediate)?;
-        let (content, from): (Option<String>, i64) = tx
+        let (content, from_kind): (Option<String>, i64) = tx
             .query_row(
                 "SELECT ContentID, Kind FROM djmdCue WHERE ID = ?1 AND rb_local_deleted = 0",
                 params![cue],
                 |r| Ok((r.get(0)?, r.get(1)?)),
             )
             .map_err(|_| DbError::WriteRefused(format!("no cue {cue}")))?;
-        if from == 0 {
+        if from_kind == 0 {
             return Err(DbError::WriteRefused("a memory cue has no hot cue slot".to_owned()));
         }
-        if from == i64::from(kind) {
+        let Some(from) = slot_of(from_kind) else {
+            return Err(DbError::WriteRefused(format!("cue {cue} is not in a hot cue slot")));
+        };
+        if from == to {
             return Ok(Changed { rows: 1, usn: 0 });
         }
+        // Every live hot cue of the track, with the slot it takes after the
+        // move: the moved cue lands on `to`, those between slide one toward
+        // the slot it left.
+        let held: Vec<(String, i64)> = {
+            let mut stmt = tx.prepare(
+                "SELECT ID, Kind FROM djmdCue WHERE ContentID IS ?1 AND Kind > 0 AND rb_local_deleted = 0",
+            )?;
+            let rows = stmt.query_map(params![content], |r| Ok((r.get(0)?, r.get(1)?)))?;
+            rows.collect::<rusqlite::Result<_>>()?
+        };
         let usn = next_usn(&tx)?;
-        // The occupant first, so the two rows are never both in one slot at
-        // the end of the transaction.
-        let mut rows = tx.execute(
-            "UPDATE djmdCue SET Kind = ?1, rb_local_usn = ?2, updated_at = ?3
-             WHERE ContentID IS ?4 AND Kind = ?5 AND ID <> ?6 AND rb_local_deleted = 0",
-            params![from, usn, stamp, content, i64::from(kind), cue],
-        )?;
-        rows += tx.execute(
-            "UPDATE djmdCue SET Kind = ?1, rb_local_usn = ?2, updated_at = ?3
-             WHERE ID = ?4 AND rb_local_deleted = 0",
-            params![i64::from(kind), usn, stamp, cue],
-        )?;
+        let mut rows = 0;
+        for (id, current) in held {
+            let Some(slot) = slot_of(current) else { continue };
+            let target = if id == cue {
+                to
+            } else if from < to && slot > from && slot <= to {
+                slot - 1
+            } else if from > to && slot >= to && slot < from {
+                slot + 1
+            } else {
+                continue;
+            };
+            rows += tx.execute(
+                "UPDATE djmdCue SET Kind = ?1, rb_local_usn = ?2, updated_at = ?3 WHERE ID = ?4",
+                params![SLOTS[target], usn, stamp, id],
+            )?;
+        }
         set_counter(&tx, usn)?;
         tx.commit()?;
         Ok(Changed { rows, usn })

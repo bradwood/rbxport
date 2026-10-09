@@ -89,8 +89,8 @@ export interface HotCueActions {
   /** `Clear Hot Cue <letter>`: the ✕ on a list row, and `command + 1`-`3`. */
   clear: (letter: string) => void;
   /**
-   * Drags the cue in one slot to another: an empty slot takes it, a set one
-   * trades places with it. Nothing for an empty `from`.
+   * Drags the cue in one slot to another; the cues between the two slots
+   * shift by one to make room. Nothing for an empty `from`.
    */
   move: (from: string, to: string) => void;
 }

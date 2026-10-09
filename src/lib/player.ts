@@ -108,6 +108,22 @@ export function jumpStepSeconds(size: JumpSize, bpmX100: number): number {
   return size.beats > 0 ? jumpSeconds(size.beats, bpmX100) : FINE_JUMP_SECONDS;
 }
 
+/**
+ * Whether a wheel event is one notch of a mouse wheel rather than a piece of
+ * a trackpad stream. Line and page modes are notches; in pixel mode a notch
+ * reports `wheelDeltaY` as a multiple of 120, which a trackpad's
+ * continuous deltas only match by coincidence. Pinch (ctrl) is never one.
+ *
+ * [ASSUME] WebKit and Chromium fill `wheelDeltaY` this way; not checked on
+ * hardware.
+ */
+export function isWheelNotch(event: { deltaMode: number; ctrlKey: boolean; wheelDeltaY?: number | undefined }): boolean {
+  if (event.ctrlKey) return false;
+  if (event.deltaMode !== 0) return true;
+  const wheel = event.wheelDeltaY ?? 0;
+  return wheel !== 0 && wheel % 120 === 0;
+}
+
 /** Pixels of wheel travel that make one zoom step: about one mouse notch. */
 export const WHEEL_STEP_PX = 100;
 /** After a step, further wheel input is ignored this long (ms), so a trackpad's
@@ -125,13 +141,24 @@ export const WHEEL_IDLE_MS = 250;
  * two rather than the whole zoom range. Whole-step events (mouse notches)
  * always step. Returns -1 (zoom in), 1 (zoom out)
  * or 0 (no step yet).
+ *
+ * `discrete` says the event is one notch of a mouse wheel whatever its size:
+ * a mouse with acceleration reports a slow notch as a few pixels and a fast
+ * one as several hundred, and neither should change how many levels a notch
+ * is worth. A notch is always exactly one step.
  */
 export function createWheelZoomGate() {
   let travel = 0;
   let lastEvent = Number.NEGATIVE_INFINITY;
   let lastStep = Number.NEGATIVE_INFINITY;
-  return (deltaPx: number, now: number): -1 | 0 | 1 => {
+  return (deltaPx: number, now: number, discrete = false): -1 | 0 | 1 => {
     if (deltaPx === 0 || !Number.isFinite(deltaPx)) return 0;
+    if (discrete) {
+      travel = 0;
+      lastEvent = now;
+      lastStep = now;
+      return deltaPx > 0 ? 1 : -1;
+    }
     if (now - lastEvent > WHEEL_IDLE_MS) travel = 0;
     lastEvent = now;
     // Reversing direction discards travel in the old one.

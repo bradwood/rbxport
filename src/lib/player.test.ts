@@ -34,6 +34,7 @@ import {
   ZOOM_STEPS,
   zoomBy,
   createWheelZoomGate,
+  isWheelNotch,
   tempoChangeAtMs,
   phraseKind,
   phraseSpans,
@@ -999,6 +1000,20 @@ describe("createWheelZoomGate", () => {
     const gate = createWheelZoomGate();
     expect(gate(100, 0)).toBe(1);
     expect(gate(-120, 1000)).toBe(-1);
+  });
+
+  it("makes every discrete notch one step whatever its size or pace", () => {
+    const gate = createWheelZoomGate();
+    expect([4, 12, 100, 400, 7].map((px, i) => gate(px, i * 20, true))).toEqual([1, 1, 1, 1, 1]);
+    expect(gate(-3, 120, true)).toBe(-1);
+  });
+
+  it("tells a mouse notch from a trackpad event", () => {
+    expect(isWheelNotch({ deltaMode: 1, ctrlKey: false })).toBe(true);
+    expect(isWheelNotch({ deltaMode: 0, ctrlKey: false, wheelDeltaY: -120 })).toBe(true);
+    expect(isWheelNotch({ deltaMode: 0, ctrlKey: false, wheelDeltaY: -37 })).toBe(false);
+    expect(isWheelNotch({ deltaMode: 0, ctrlKey: true, wheelDeltaY: -120 })).toBe(false);
+    expect(isWheelNotch({ deltaMode: 0, ctrlKey: false })).toBe(false);
   });
 
   it("turns a trackpad swipe and its inertia tail into one or two steps", () => {

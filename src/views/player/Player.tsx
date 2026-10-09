@@ -44,6 +44,7 @@ import {
   jumpStepSeconds,
   zoomBy,
   createWheelZoomGate,
+  isWheelNotch,
   needsRedraw,
   OVERDRAW,
   scrollOffset,
@@ -1138,7 +1139,7 @@ export const Player = memo(function Player({
     event.preventDefault();
     // Line and page modes (mice on some platforms) report lines, not pixels.
     const px = event.deltaY * (event.deltaMode === 1 ? 33 : event.deltaMode === 2 ? 400 : 1);
-    const direction = wheelGate.current(px, event.timeStamp);
+    const direction = wheelGate.current(px, event.timeStamp, isWheelNotch({ deltaMode: event.deltaMode, ctrlKey: event.ctrlKey, wheelDeltaY: (event.nativeEvent as { wheelDeltaY?: number }).wheelDeltaY }));
     if (direction !== 0) setBars((current) => zoomBy(current, direction));
   }, [setBars]);
 

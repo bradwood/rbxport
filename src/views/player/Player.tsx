@@ -1312,6 +1312,9 @@ export const Player = memo(function Player({
   }, [playback.playing, cancelCall]);
   useEffect(() => cancelCall, [track?.id, cancelCall]);
   const deckPlaying = useCallback(() => playback.playing, [playback.playing]);
+  // The hot cue list's drag: the slot being dragged, and the one it is over.
+  const [dragSlot, setDragSlot] = useState<string | null>(null);
+  const [dropSlot, setDropSlot] = useState<string | null>(null);
   const hot = useHotCues({
     trackId: playback.idle ? null : track?.id ?? null,
     cues, positionSeconds, seek, play: playFromCue, playing: deckPlaying, jumpAt, activeLoop: playingLoop, exitLoop: leaveLoop,
@@ -2848,6 +2851,27 @@ export const Player = memo(function Player({
                   aria-disabled={cue ? undefined : true}
                   data-empty={cue ? undefined : ""}
                   onClick={() => hot.press(letter)}
+                  data-dragging={dragSlot === letter ? "" : undefined}
+                  data-drop={dragSlot !== null && dropSlot === letter && dragSlot !== letter ? "" : undefined}
+                  draggable={movable}
+                  onDragStart={movable ? (event) => {
+                    event.dataTransfer.effectAllowed = "move";
+                    event.dataTransfer.setData("text/plain", `hot-cue:${letter}`);
+                    setDragSlot(letter);
+                  } : undefined}
+                  onDragEnd={() => { setDragSlot(null); setDropSlot(null); }}
+                  onDragOver={dragSlot !== null ? (event) => {
+                    event.preventDefault();
+                    event.dataTransfer.dropEffect = "move";
+                    setDropSlot(letter);
+                  } : undefined}
+                  onDragLeave={() => setDropSlot((over) => (over === letter ? null : over))}
+                  onDrop={dragSlot !== null ? (event) => {
+                    event.preventDefault();
+                    hot.move(dragSlot, letter);
+                    setDragSlot(null);
+                    setDropSlot(null);
+                  } : undefined}
                   onContextMenu={cue ? (event) => {
                     event.preventDefault(); event.stopPropagation();
                     setCueColorMenu({x: event.clientX, y: event.clientY, cue});

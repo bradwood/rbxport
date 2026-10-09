@@ -1149,13 +1149,23 @@ button.pageNumber:disabled { color: var(--c-icon-off); }
    glyph. Same glyph, same place, and disabled it dims like the pad row's. */
 button.cueDelete {
   border: 0;
+  border-radius: 2px;
   background: none;
-  padding: 0;
+  /* The padding is what the hover fills; the margin takes it back so the
+     ✕ stays where the capture has it. */
+  padding: 2px 5px;
+  margin: -2px -5px;
   font: inherit;
   cursor: default;
 }
+button.cueDelete:hover:not(:disabled),
+button.cueDelete:focus-visible:not(:disabled) { background: var(--c-error); color: var(--c-icon-on); }
 button.cueDelete:disabled { color: var(--c-icon-off); }
 .cueRow[role="button"] { cursor: default; text-align: left; }
+/* A hot cue row dragged to another slot: it dims where it was lifted from and
+   the slot it would land on is outlined. */
+.cueRow[data-dragging] { opacity: .4; }
+.cueRow[data-drop] { outline: 1px solid var(--c-accent); outline-offset: -1px; }
 
 /* The INFO tab is DeckInfo.module.css. */
 

@@ -1724,6 +1724,53 @@ impl Writer {
         Ok(Changed { rows, usn })
     }
 
+    /// Moves a hot cue to another pad slot, swapping with whatever is there.
+    ///
+    /// `kind` is the slot's `djmdCue.Kind`, as for [`Writer::add_cue`]. A
+    /// slot is only the cue's `Kind`, so a move rewrites that column; when
+    /// the target slot already holds a cue, that cue takes the slot this one
+    /// leaves, in the same transaction. Memory cues have no slot and are
+    /// refused. rekordbox's own window offering this has not been observed
+    /// [UNKNOWN]; the rows written are ones rekordbox itself writes.
+    pub fn move_hot_cue(&mut self, cue: &str, kind: u8) -> Result<Changed> {
+        if kind == 0 || kind == 4 || kind > 17 {
+            return Err(DbError::WriteRefused(format!("{kind} is not a hot cue slot rekordbox has")));
+        }
+        self.prepare()?;
+        let stamp = time::now();
+        let tx = self.library.connection_mut()
+            .transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let (content, from): (Option<String>, i64) = tx
+            .query_row(
+                "SELECT ContentID, Kind FROM djmdCue WHERE ID = ?1 AND rb_local_deleted = 0",
+                params![cue],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .map_err(|_| DbError::WriteRefused(format!("no cue {cue}")))?;
+        if from == 0 {
+            return Err(DbError::WriteRefused("a memory cue has no hot cue slot".to_owned()));
+        }
+        if from == i64::from(kind) {
+            return Ok(Changed { rows: 1, usn: 0 });
+        }
+        let usn = next_usn(&tx)?;
+        // The occupant first, so the two rows are never both in one slot at
+        // the end of the transaction.
+        let mut rows = tx.execute(
+            "UPDATE djmdCue SET Kind = ?1, rb_local_usn = ?2, updated_at = ?3
+             WHERE ContentID IS ?4 AND Kind = ?5 AND ID <> ?6 AND rb_local_deleted = 0",
+            params![from, usn, stamp, content, i64::from(kind), cue],
+        )?;
+        rows += tx.execute(
+            "UPDATE djmdCue SET Kind = ?1, rb_local_usn = ?2, updated_at = ?3
+             WHERE ID = ?4 AND rb_local_deleted = 0",
+            params![i64::from(kind), usn, stamp, cue],
+        )?;
+        set_counter(&tx, usn)?;
+        tx.commit()?;
+        Ok(Changed { rows, usn })
+    }
+
     /// The track a live cue belongs to, or `None` for a cue that is not there.
     ///
     /// A read, so nothing is prepared or gated: a caller that is about to move

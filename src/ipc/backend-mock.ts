@@ -1261,6 +1261,15 @@ export function createMockBackend(options: MockOptions = {}): Backend {
       found.cue.positionMs = positionMs;
       return cuesChanged(found.track, undefined);
     },
+    moveHotCue: (cue, letter) => {
+      const found = findCue(cue);
+      if (!found) return notFound(`no cue ${cue}`);
+      if (found.cue.memory) return refuse("A memory cue has no hot cue slot.");
+      const occupant = cuesOf(found.track).find((c) => !c.memory && c.letter === letter && c !== found.cue);
+      if (occupant) occupant.letter = found.cue.letter;
+      found.cue.letter = letter;
+      return cuesChanged(found.track, undefined);
+    },
     deleteCue: (cue) => {
       const found = findCue(cue);
       if (!found) return notFound(`no cue ${cue}`);

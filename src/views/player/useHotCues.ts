@@ -88,6 +88,11 @@ export interface HotCueActions {
   press: (letter: string) => void;
   /** `Clear Hot Cue <letter>`: the ✕ on a list row, and `command + 1`-`3`. */
   clear: (letter: string) => void;
+  /**
+   * Drags the cue in one slot to another: an empty slot takes it, a set one
+   * trades places with it. Nothing for an empty `from`.
+   */
+  move: (from: string, to: string) => void;
 }
 
 export function useHotCues(deck: HotCueDeck): HotCueActions {
@@ -145,5 +150,14 @@ export function useHotCues(deck: HotCueDeck): HotCueActions {
     [cues, canEdit, write],
   );
 
-  return { canEdit, at, press, clear };
+  const move = useCallback(
+    (from: string, to: string) => {
+      const cue = hotCue(cues, from);
+      if (!cue || !canEdit || cue.id === "" || from === to) return;
+      write((edits) => edits.moveHotCue(cue.id, to));
+    },
+    [cues, canEdit, write],
+  );
+
+  return { canEdit, at, press, clear, move };
 }

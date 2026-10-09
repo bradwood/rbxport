@@ -1716,6 +1716,11 @@ export interface Edits {
    */
   addLoop(track: string, kind: CueKind, inMs: number, outMs: number, beats?: number): Promise<string>;
   moveCue(cue: string, positionMs: number): Promise<void>;
+  /**
+   * Moves a hot cue to another pad slot, `A` to `P`. A cue already in that
+   * slot takes this one's old slot, so nothing is lost.
+   */
+  moveHotCue(cue: string, letter: string): Promise<void>;
   /** Changes a cue's palette entry; null resets it to its default. */
   setCueColour(cue: string, colour: number | null): Promise<void>;
   deleteCue(cue: string): Promise<void>;

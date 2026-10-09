@@ -74,10 +74,12 @@ pub enum CueEdit {
     Add { track: String, kind: CueKind, position_ms: u32 },
     AddLoop { track: String, kind: CueKind, in_ms: u32, out_ms: u32, beats: u16 },
     Move { cue: String, position_ms: u32 },
+    /// A hot cue to another pad slot, swapping with the cue there.
+    Slot { cue: String, kind: CueKind },
     Colour { cue: String, colour: Option<u8> },
+    Comment { cue: String, comment: String },
     Delete { cue: String },
 }
-    Comment { cue: String, comment: String },
 
 /// What an edit did: the cue it touched and the track whose cues to re-read.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -111,9 +113,25 @@ pub fn apply(writer: &mut rbl_db::write::Writer, edit: CueEdit) -> AppResult<Cue
             }
             Ok(CueChange { track, cue })
         }
+        CueEdit::Slot { cue, kind } => {
+            let track = owner_of(writer, &cue)?;
+            let changed = writer.move_hot_cue(&cue, kind.number()?).map_err(write_error)?;
+            if changed.rows == 0 {
+                return Err(AppError::new(ErrorKind::NotFound, format!("no cue {cue}")));
+            }
+            Ok(CueChange { track, cue })
+        }
         CueEdit::Colour { cue, colour } => {
             let track = owner_of(writer, &cue)?;
             let changed = writer.set_cue_colour(&cue, colour).map_err(write_error)?;
+            if changed.rows == 0 {
+                return Err(AppError::new(ErrorKind::NotFound, format!("no cue {cue}")));
+            }
+            Ok(CueChange { track, cue })
+        }
+        CueEdit::Comment { cue, comment } => {
+            let track = owner_of(writer, &cue)?;
+            let changed = writer.set_cue_comment(&cue, &comment).map_err(write_error)?;
             if changed.rows == 0 {
                 return Err(AppError::new(ErrorKind::NotFound, format!("no cue {cue}")));
             }
@@ -124,14 +142,6 @@ pub fn apply(writer: &mut rbl_db::write::Writer, edit: CueEdit) -> AppResult<Cue
             // owner, and the owner is whose cues the index has to re-read.
             let track = owner_of(writer, &cue)?;
             let changed = writer.delete_cue(&cue).map_err(write_error)?;
-            if changed.rows == 0 {
-                return Err(AppError::new(ErrorKind::NotFound, format!("no cue {cue}")));
-            }
-            Ok(CueChange { track, cue })
-        }
-        CueEdit::Comment { cue, comment } => {
-            let track = owner_of(writer, &cue)?;
-            let changed = writer.set_cue_comment(&cue, &comment).map_err(write_error)?;
             if changed.rows == 0 {
                 return Err(AppError::new(ErrorKind::NotFound, format!("no cue {cue}")));
             }
@@ -218,11 +228,26 @@ pub async fn move_cue<R: tauri::Runtime>(
     edit_cues(app, state, "move_cue", CueEdit::Move { cue, position_ms }).await.map(|_| ())
 }
 
+/// Moves a hot cue to another pad slot, swapping with the cue already there.
+#[tauri::command]
+pub async fn move_hot_cue<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>, state: State<'_, Arc<AppState>>, cue: String, kind: CueKind,
+) -> AppResult<()> {
+    edit_cues(app, state, "move_hot_cue", CueEdit::Slot { cue, kind }).await.map(|_| ())
+}
+
 #[tauri::command]
 pub async fn set_cue_colour<R: tauri::Runtime>(
     app: tauri::AppHandle<R>, state: State<'_, Arc<AppState>>, cue: String, colour: Option<u8>,
 ) -> AppResult<()> {
     edit_cues(app, state, "set_cue_colour", CueEdit::Colour { cue, colour }).await.map(|_| ())
+}
+
+#[tauri::command]
+pub async fn set_cue_comment<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>, state: State<'_, Arc<AppState>>, cue: String, comment: String,
+) -> AppResult<()> {
+    edit_cues(app, state, "set_cue_comment", CueEdit::Comment { cue, comment }).await.map(|_| ())
 }
 
 #[tauri::command]
@@ -243,13 +268,6 @@ pub async fn delete_cue<R: tauri::Runtime>(
 pub async fn convert_memory_cues_to_hot<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     state: State<'_, Arc<AppState>>,
-#[tauri::command]
-pub async fn set_cue_comment<R: tauri::Runtime>(
-    app: tauri::AppHandle<R>, state: State<'_, Arc<AppState>>, cue: String, comment: String,
-) -> AppResult<()> {
-    edit_cues(app, state, "set_cue_comment", CueEdit::Comment { cue, comment }).await.map(|_| ())
-}
-
     track: String,
 ) -> AppResult<u32> {
     let library = state.library()?;

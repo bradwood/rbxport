@@ -1228,6 +1228,37 @@ fn a_cue_moves_and_soft_deletes() {
 }
 
 #[test]
+fn a_hot_cue_moves_to_a_free_slot_and_swaps_with_an_occupied_one() {
+    let mut f = fixture();
+    let a = f.writer.add_cue(&track_id(0), 1, 1_000).unwrap();
+    let c = f.writer.add_cue(&track_id(0), 3, 3_000).unwrap();
+    let other = f.writer.add_cue(&track_id(1), 6, 9_000).unwrap();
+    let kind = |f: &Fixture, id: &str| -> i64 { f.one("SELECT Kind FROM djmdCue WHERE ID = ?1", &[&id]) };
+
+    // To a free slot (E is kind 6, on this track).
+    f.writer.move_hot_cue(&a, 6).unwrap();
+    assert_eq!(kind(&f, &a), 6);
+    // Onto an occupied one: C and E trade places, and another track's E is left alone.
+    f.writer.move_hot_cue(&c, 6).unwrap();
+    assert_eq!((kind(&f, &c), kind(&f, &a)), (6, 3));
+    assert_eq!(kind(&f, &other), 6);
+    // Onto its own slot: nothing changes.
+    f.writer.move_hot_cue(&c, 6).unwrap();
+    assert_eq!(kind(&f, &c), 6);
+}
+
+#[test]
+fn a_memory_cue_has_no_slot_to_move_to_or_from() {
+    let mut f = fixture();
+    let memory = f.writer.add_cue(&track_id(0), 0, 1_000).unwrap();
+    let hot = f.writer.add_cue(&track_id(0), 1, 2_000).unwrap();
+    assert!(matches!(f.writer.move_hot_cue(&memory, 2), Err(DbError::WriteRefused(_))));
+    assert!(matches!(f.writer.move_hot_cue(&hot, 0), Err(DbError::WriteRefused(_))));
+    assert!(matches!(f.writer.move_hot_cue(&hot, 4), Err(DbError::WriteRefused(_))));
+    assert!(matches!(f.writer.move_hot_cue("no-such-cue", 2), Err(DbError::WriteRefused(_))));
+}
+
+#[test]
 fn every_hot_cue_slot_rekordbox_uses_can_be_written() {
     // 1-3 and 5-17: sixteen slots, A to P, with 4 unused.
     let mut f = fixture();
@@ -1281,6 +1312,22 @@ fn cue_colours_use_the_field_rekordbox_assigns_to_each_kind() {
     assert_eq!(columns(&f.writer, &hot), (-1, 21));
 }
 
+#[test]
+fn a_cue_can_be_named_and_unnamed() {
+    let mut f = fixture();
+    let id = f.writer.add_cue(&track_id(0), 0, 1_000).unwrap();
+    let comment = |writer: &Writer| -> String {
+        writer.library().connection().query_row(
+            "SELECT Comment FROM djmdCue WHERE ID=?1", [&id], |row| row.get(0),
+        ).unwrap()
+    };
+    assert_eq!(comment(&f.writer), "");
+    f.writer.set_cue_comment(&id, "Drop").unwrap();
+    assert_eq!(comment(&f.writer), "Drop");
+    f.writer.set_cue_comment(&id, "").unwrap();
+    assert_eq!(comment(&f.writer), "");
+}
+
 // ----------------------------------------------------------------- import
 
 /// A minimal but genuine WAV, so the tag reader has something real to open.
@@ -1312,22 +1359,6 @@ fn a_file_is_imported_in_the_shape_a_local_row_has() {
     write_wav(&path, 2);
 
     let mut f = fixture();
-#[test]
-fn a_cue_can_be_named_and_unnamed() {
-    let mut f = fixture();
-    let id = f.writer.add_cue(&track_id(0), 0, 1_000).unwrap();
-    let comment = |writer: &Writer| -> String {
-        writer.library().connection().query_row(
-            "SELECT Comment FROM djmdCue WHERE ID=?1", [&id], |row| row.get(0),
-        ).unwrap()
-    };
-    assert_eq!(comment(&f.writer), "");
-    f.writer.set_cue_comment(&id, "Drop").unwrap();
-    assert_eq!(comment(&f.writer), "Drop");
-    f.writer.set_cue_comment(&id, "").unwrap();
-    assert_eq!(comment(&f.writer), "");
-}
-
     let id = f.writer.import_file(&path).unwrap();
 
     let (status, local_status, synced, usn): (i64, i64, i64, Option<i64>) = f

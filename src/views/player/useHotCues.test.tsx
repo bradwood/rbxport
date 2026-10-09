@@ -59,6 +59,10 @@ function stubBackend(): Backend {
         sent.push(`delete:${cue}`);
         return Promise.resolve();
       },
+      moveHotCue: (cue: string, letter: string) => {
+        sent.push(`slot:${cue}:${letter}`);
+        return Promise.resolve();
+      },
     },
   } as unknown as Backend;
 }
@@ -329,5 +333,25 @@ describe("what the deck is told when a write fails", () => {
     act(() => pads.press("A"));
     await settle();
     expect(onError).toHaveBeenLastCalledWith("the library is open read-only");
+  });
+});
+
+describe("dragging a cue to another slot", () => {
+  it("moves the cue by its id, to an empty slot or onto a set one", async () => {
+    mount({ cues: [hot("7", "A", 1000), hot("8", "C", 3000)] });
+    act(() => pads.move("A", "B"));
+    act(() => pads.move("A", "C"));
+    await settle();
+    // One write at a time: the second drag is dropped until the first lands.
+    expect(sent).toEqual(["slot:7:B"]);
+  });
+
+  it("does nothing from an empty slot, onto itself, or when the library is read-only", async () => {
+    mount({ cues: [hot("7", "A", 1000)] });
+    act(() => { pads.move("B", "C"); pads.move("A", "A"); });
+    mount({ cues: [hot("7", "A", 1000)], readOnly: true });
+    act(() => pads.move("A", "B"));
+    await settle();
+    expect(sent).toEqual([]);
   });
 });

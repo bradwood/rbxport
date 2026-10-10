@@ -50,6 +50,9 @@ type Tick = "on" | "off" | "some";
 type ImportKind = "cues" | "history" | "settings";
 /** How many left-out tracks the sync-finished dialog lists before pointing at the log. */
 const MAX_FAILURES_SHOWN = 10;
+/** What the backend says while the library is still being read, and how soon to ask again. */
+const LIBRARY_LOADING = "has not finished loading";
+const LIBRARY_RETRY_MS = 3000;
 
 const IMPORT_KINDS: readonly { kind: ImportKind; label: string; noun: string }[] = [
   { kind: "cues", label: "Cues and beat grids", noun: "cues and beat grids" },
@@ -128,6 +131,9 @@ export function SyncManager({ windowed = false, onClose, onSynced, onReady }: Sy
   const [estimates, setEstimates] = useState<ReadonlyMap<string, SyncEstimate>>(new Map());
   const [query, setQuery] = useState("");
   const [loadingTree, setLoadingTree] = useState(true);
+  // Sync Manager can open before the library has finished loading; the tree is
+  // asked for again every few seconds until it can answer.
+  const [libraryLoading, setLibraryLoading] = useState(false);
   const [treeError, setTreeError] = useState("");
   // True from the start: the first scan begins on mount, and nothing may
   // offer SYNC or say "no devices" before it has answered.
@@ -256,8 +262,11 @@ export function SyncManager({ windowed = false, onClose, onSynced, onReady }: Sy
     const seen = new Set<string>();
     // Each read is numbered so a slow one cannot overwrite a newer one.
     let latest = 0;
+    let retry: ReturnType<typeof setTimeout> | undefined;
     const read = async () => {
       const mine = ++latest;
+      clearTimeout(retry);
+      let waiting = false;
       try {
         const backend = await getBackend();
         const tree = await backend.playlistTree();
@@ -268,16 +277,22 @@ export function SyncManager({ windowed = false, onClose, onSynced, onReady }: Sy
         const present = new Set(nodes.map((n) => n.id));
         setTree(tree);
         setTreeError("");
+        setLibraryLoading(false);
         setCollapsed((current) => new Set([...[...current].filter((id) => present.has(id)), ...fresh]));
         // A deleted playlist is not something SYNC can be asked for.
         setTicked((current) => {
           const kept = [...current].filter((id) => present.has(id));
           return kept.length === current.size ? current : new Set(kept);
         });
-      } catch {
-        if (live && mine === latest) setTreeError("Couldn’t load playlists. Reopen Sync Manager to try again.");
+      } catch (e) {
+        if (live && mine === latest) {
+          waiting = errorMessage(e).includes(LIBRARY_LOADING);
+          setLibraryLoading(waiting);
+          if (waiting) retry = setTimeout(() => void read(), LIBRARY_RETRY_MS);
+          else setTreeError("Couldn’t load playlists. Reopen Sync Manager to try again.");
+        }
       } finally {
-        if (live && mine === latest) setLoadingTree(false);
+        if (live && mine === latest && !waiting) setLoadingTree(false);
       }
     };
     void read();
@@ -287,6 +302,7 @@ export function SyncManager({ windowed = false, onClose, onSynced, onReady }: Sy
     });
     return () => {
       live = false;
+      clearTimeout(retry);
       stop?.();
     };
   }, []);
@@ -847,7 +863,8 @@ export function SyncManager({ windowed = false, onClose, onSynced, onReady }: Sy
                 </div>
               );
             })}
-            {loadingTree ? <p className={styles.empty}>Loading playlists…</p>
+            {libraryLoading ? <p className={styles.empty} role="status">{t("Please wait (loading database)…")}</p>
+              : loadingTree ? <p className={styles.empty}>Loading playlists…</p>
               : treeError ? <p className={styles.empty} role="alert">{treeError}</p>
               : nodes.length === 0 ? <p className={styles.empty}>No playlists yet. Create a playlist in your library to get started.</p>
               : visible.length === 0 ? <p className={styles.empty}>No playlists match “{query.trim()}”.</p> : null}

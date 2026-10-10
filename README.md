@@ -24,7 +24,7 @@ number. "No events lost" both times. RX3 = 169.254.222.109, rekordbox =
 The analysis below is ours, from decoding the db server messages (the usual
 `11 87 23 49 ae` framing). Request names in quotes are our reading; rbx's
 existing names are used where it has one. `r:m:s:t` is the usual first
-argument (`184615937` = 0x0B010001 etc.).
+argument (e.g. `184615937` = 0x0B010401).
 
 ## Requests involved
 

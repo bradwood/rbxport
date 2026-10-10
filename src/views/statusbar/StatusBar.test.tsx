@@ -57,3 +57,19 @@ it("offers the support action when it is available", () => {
   expect(button).toBeDefined();
   expect(onSupport).toHaveBeenCalledOnce();
 });
+
+it("lists the running job and then those waiting, each with its own Stop", () => {
+  const onStopJob = vi.fn();
+  act(() => root.render(<StatusBar onStopJob={onStopJob} jobs={[
+    { id: 1, label: "Adding 495 to Set", done: 99, total: 495, state: "running", target: "p", pendingRows: 396 },
+    { id: 2, label: "Removing 10 from the collection", done: 0, total: 10, state: "queued", target: null, pendingRows: 0 },
+  ]} />));
+  const meters = [...host.querySelectorAll("[data-state]")];
+  expect(meters.map((m) => m.getAttribute("data-state"))).toEqual(["running", "queued"]);
+  expect(meters[0]?.textContent).toContain("(20%)");
+  expect(meters[1]?.textContent).toContain("Queued");
+  const stops = host.querySelectorAll<HTMLButtonElement>("button[aria-label^='Stop']");
+  expect(stops).toHaveLength(2);
+  act(() => stops[1]?.click());
+  expect(onStopJob).toHaveBeenCalledWith(2);
+});

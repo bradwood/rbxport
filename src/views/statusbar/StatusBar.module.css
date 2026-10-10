@@ -142,3 +142,10 @@
 .backupMeter { display: inline-flex; align-items: center; gap: 8px; margin-right: 12px; flex-shrink: 0; white-space: nowrap; }
 .analysisMeter { display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; }
 .backupPercent { min-width: 5ch; font-variant-numeric: tabular-nums; }
+
+/* A queued or running library operation. The Stop button leads, as the
+   analysis one does, so it does not slide as the percentage changes width. */
+.jobMeter { display: inline-flex; align-items: center; gap: 8px; flex-shrink: 0; white-space: nowrap; }
+.jobMeter .stop { margin-right: 0; }
+.jobMeter[data-state="queued"] .jobLabel { color: var(--c-text-dim); }
+.jobQueued { color: var(--c-text-dim); font-weight: 400; }

@@ -724,6 +724,11 @@ export interface TrackTableProps {
   libraryGeneration?: number;
   /** Edits shown before the backend has caught up. */
   pendingEdits?: PendingEdits;
+  /**
+   * Rows on their way into this list from a running operation, drawn as
+   * skeletons after the last real row until they arrive.
+   */
+  pendingRows?: number;
   /** The rows behind the selection, for queueing analysis. */
   onSelectedTracks?: (tracks: { id: string; title: string }[]) => void;
   /** Analyse whatever is selected. */
@@ -821,7 +826,7 @@ export const TrackTable = memo(function TrackTable({
   spec, onSortChange, onSelectionChange, title, query, onQueryChange, searchRef, searchField = "all", onSearchFieldChange,
   columns, onColumnMove, onColumnResize, onColumnToggle, onColumnAutoSize,
   onColumnAutoSizeAll, onFocusedRow, onDragTracks, dragging = false, onDropTracks, onDropFiles, onDragError, onRate, onComment, onReorder, onEditField, onEditBlocked, seed, onFirstRows,
-  libraryGeneration, pendingEdits, onSelectedTracks, onAnalyse,
+  libraryGeneration, pendingEdits, pendingRows = 0, onSelectedTracks, onAnalyse,
   onShowInformation, onShowInFinder, onRemoveFromPlaylist, onRemoveFromHistory, onResetPlayCount,
   onRemoveFromCollection, onAutoRelocate, onRelocate, onConvertMemoryCues, readOnly = false,
   onImportToCollection, onAnalysisLock, onAddToPlaylist, onAddToTagList, onRemoveFromTagList, onExportTrack, onReloadTag,
@@ -953,7 +958,7 @@ export const TrackTable = memo(function TrackTable({
   }, [onColumnResize, onColumnMove]);
 
   const virtualizer = useVirtualizer({
-    count: view.count,
+    count: view.count + pendingRows,
     getScrollElement: () => scrollRef.current,
     estimateSize: () => rowH,
     // Mount a half-screen of rows past the viewport each way. Beyond drawing
@@ -1646,7 +1651,8 @@ export const TrackTable = memo(function TrackTable({
           style={{ height: `${virtualizer.getTotalSize()}px` }}
         >
           {items.map((item) => {
-            const row = view.rowAt(item.index);
+            // Past the last real row are the ones still arriving: skeletons.
+            const row = item.index < view.count ? view.rowAt(item.index) : undefined;
             return (
               <TrackRow
                 key={row?.id ?? `slot-${item.key}`}

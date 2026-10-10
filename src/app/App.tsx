@@ -1,4 +1,5 @@
 import { ConfirmHost } from "@/components/ConfirmDialog";
+import { JobQueue, slices, type JobView } from "@/lib/jobQueue";
 import { useBackupProgress } from "@/store/useBackupProgress";
 import { useExportProgress } from "@/store/useExportProgress";
 import { reportStartupPaint } from "@/lib/startup";
@@ -15,7 +16,7 @@ import { useEventCallback } from "@/store/useEventCallback";
  */
 import type { TrackSearchField } from "@/lib/search";
 
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { droppedFilePaths, getBackend, subscribeNativeFileDrops } from "@/ipc/client";
 import type {
   Backend, DeckId, Device, ImportReport, LibraryProblem, LibrarySummary, RowDto, SortColumn, TrackField, TreeNode, ViewSpec,
@@ -98,6 +99,15 @@ const SmartPlaylistEditor = lazy(() => import("@/views/tree/SmartPlaylistEditor"
 const MissingFileManager = lazy(() => import("@/views/library/MissingFileManager").then(m => ({ default: m.MissingFileManager })));
 
 const SHOW_MAIN_SUPPORT = true;
+
+/**
+ * How many tracks one backend call handles in a long operation. Each call is
+ * one database write, so a slice is the unit the status bar's progress moves
+ * in and the longest a Stop waits.
+ */
+const ADD_SLICE = 100;
+const IMPORT_SLICE = 25;
+const REMOVE_SLICE = 25;
 
 function ConnectedPreferences(props: Omit<React.ComponentProps<typeof Preferences>, "reduction" | "vu" | "peakLeft" | "peakRight">) {
   const master = useMasterDisplay();
@@ -596,6 +606,12 @@ function AppBody() {
   const [playerError, setPlayerError] = useState<string | null>(null);
   const report = useCallback((text: string) => setNote({ text, failed: false }), []);
   const refuse = useCallback((text: string) => setNote({ text, failed: true }), []);
+  // Long library operations wait their turn here, shown in the status bar.
+  const jobError = useRef<(job: JobView, error: unknown) => void>(() => undefined);
+  const [jobs] = useState(() => new JobQueue((job, error) => jobError.current(job, error)));
+  const jobList = useSyncExternalStore(jobs.subscribe, jobs.getSnapshot);
+  const stopJob = useCallback((id: number) => jobs.stop(id), [jobs]);
+  jobError.current = (job, error) => refuse(error instanceof Error ? error.message : `${job.label} failed.`);
   // A waveform click whose track could not be previewed says why.
   useEffect(() => onPreviewError(refuse), [refuse]);
   // Choosing another playlist in the tree stops the preview, as rekordbox's
@@ -992,30 +1008,40 @@ function AppBody() {
         refuse(refusal(true));
         return;
       }
-      void (async () => {
-        const backend = await getBackend();
-        try {
+      const name = tree.find((n) => n.id === playlistId)?.name ?? t("the playlist");
+      jobs.add({
+        label: t("Adding {count} to {name}", { count: ids.length, name }),
+        total: ids.length,
+        target: playlistId,
+        pendingRows: ids.length,
+        run: async ({ signal, update }) => {
+          const backend = await getBackend();
           // Rows dragged out of the Explorer that the library does not hold
           // are imported on the way in, as Add To Playlist does with them.
           const { ids: trackIds, report: imported } = await importLoose(ids, (paths) => backend.importPaths(paths));
           if (imported && analysisPrefs.auto && imported.tracks.length > 0) analysis.add(imported.tracks);
-          const name = tree.find((n) => n.id === playlistId)?.name ?? "the playlist";
           const skipped = imported?.skipped.length ?? 0;
           const tail = skipped > 0 ? `; ${skipped} skipped` : "";
           if (trackIds.length === 0) {
             refuse(`Nothing added to ${name}${tail}.`);
             return;
           }
-          await backend.edits.addTracksToPlaylist(playlistId, trackIds);
-          report(`Added ${trackIds.length} track${trackIds.length === 1 ? "" : "s"} to ${name}${tail}.`);
-        } catch (e) {
-          // The refusal that matters is Rekordbox holding the database; say so
-          // rather than letting the drop look as if it worked.
-          refuse(e instanceof Error ? e.message : "That could not be saved.");
-        }
-      })();
+          update({ total: trackIds.length, pendingRows: trackIds.length });
+          let added = 0;
+          for (const slice of slices(trackIds, ADD_SLICE)) {
+            if (signal.aborted) break;
+            await backend.edits.addTracksToPlaylist(playlistId, slice);
+            added += slice.length;
+            update({ done: added, pendingRows: trackIds.length - added });
+          }
+          const noun = (n: number) => `${n} track${n === 1 ? "" : "s"}`;
+          report(added < trackIds.length
+            ? `Stopped: added ${added} of ${noun(trackIds.length)} to ${name}${tail}.`
+            : `Added ${noun(added)} to ${name}${tail}.`);
+        },
+      });
     },
-    [draggedTracks, tree, report, refuse, advancedPrefs.protectLibrary, analysisPrefs.auto, analysis],
+    [draggedTracks, tree, report, refuse, advancedPrefs.protectLibrary, analysisPrefs.auto, analysis, jobs, t],
   );
 
   /**
@@ -1036,32 +1062,63 @@ function AppBody() {
           dropFolders(playlistId, paths, t, report, refuse, setTree, analysisPrefs.auto ? analysis.add : undefined));
         return;
       }
-      const name = target?.name ?? "the playlist";
-      report(`Importing ${paths.length} item${paths.length === 1 ? "" : "s"} into ${name}…`);
-      void (async () => {
-        try {
+      const name = target?.name ?? t("the playlist");
+      jobs.add({
+        label: t("Finding tracks for {name}", { name }),
+        target: playlistId,
+        run: async ({ signal, update }) => {
           const backend = await getBackend();
-          const imported = await backend.importPaths(paths);
-          // Files the library already held still belong in the playlist.
-          const toAdd = [...imported.tracks, ...imported.existing];
-          if (toAdd.length > 0) {
-            await backend.edits.addTracksToPlaylist(playlistId, toAdd.map((t) => t.id));
+          // The folder is walked first, so every file is known before any is
+          // imported and the bar can say how far along it is.
+          const files = await backend.listImportFiles(paths);
+          if (signal.aborted) return;
+          if (files.length === 0) {
+            refuse(`No tracks found to add to ${name}.`);
+            return;
           }
-          const total = imported.imported + imported.skipped.length;
-          const already = imported.existing.length > 0 ? `; ${imported.existing.length} already in the library` : "";
-          report(
-            imported.skipped.length === 0
-              ? `Imported ${imported.imported} of ${total} files into ${name}${already}.`
-              : `Imported ${imported.imported} of ${total} files into ${name}; ${imported.skipped.length} skipped${already}.`,
-          );
+          const total = files.length;
+          const noun = (n: number) => `${n} track${n === 1 ? "" : "s"}`;
+          // Importing is the first half of the bar and adding the second.
+          update({ total: total * 2, done: 0, pendingRows: total, label: t("Importing {count} into {name}", { count: total, name }) });
+          const toAdd: string[] = [];
+          const fresh: ImportReport["tracks"] = [];
+          let skipped = 0;
+          let existing = 0;
+          let imported = 0;
+          let reached = 0;
+          for (const slice of slices(files, IMPORT_SLICE)) {
+            if (signal.aborted) break;
+            const result = await backend.importPathsSlice(slice);
+            reached += slice.length;
+            imported += result.imported;
+            skipped += result.skipped.length;
+            existing += result.existing.length;
+            fresh.push(...result.tracks);
+            // Files the library already held still belong in the playlist.
+            for (const track of [...result.tracks, ...result.existing]) toAdd.push(track.id);
+            update({ done: reached });
+          }
+          // One re-read of the library for the whole import, not one a slice.
+          if (imported > 0) await backend.reloadLibrary();
+          update({ label: t("Adding {count} to {name}", { count: total, name }) });
+          let added = 0;
+          for (const slice of slices(toAdd, ADD_SLICE)) {
+            if (signal.aborted) break;
+            await backend.edits.addTracksToPlaylist(playlistId, slice);
+            added += slice.length;
+            update({ done: total + added, pendingRows: toAdd.length - added });
+          }
           setTree(await backend.playlistTree());
-          if (analysisPrefs.auto && imported.tracks.length > 0) analysis.add(imported.tracks);
-        } catch (e) {
-          refuse(e instanceof Error ? e.message : "Those files could not be imported.");
-        }
-      })();
+          if (analysisPrefs.auto && fresh.length > 0) analysis.add(fresh);
+          const already = existing > 0 ? `; ${existing} already in the library` : "";
+          const left = skipped > 0 ? `; ${skipped} skipped` : "";
+          report(signal.aborted
+            ? `Stopped: ${noun(added)} added to ${name}${left}${already}.`
+            : `Added ${noun(added)} to ${name}${left}${already}.`);
+        },
+      });
     },
-    [tree, report, refuse, advancedPrefs.protectLibrary, analysisPrefs.auto, analysis, t],
+    [tree, report, refuse, advancedPrefs.protectLibrary, analysisPrefs.auto, analysis, jobs, t],
   );
 
   const importDroppedFilesTo = useCallback(
@@ -1524,12 +1581,28 @@ function AppBody() {
         `Remove ${count} from the collection? This can’t be undone. The files stay where they are.`,
       );
       if (!sure) return false;
-      return writeNow(async (b) => {
-        await b.edits.removeFromCollection([...ids]);
-        return `Removed ${count} from the collection.`;
+      jobs.add({
+        label: t("Removing {count} from the collection", { count: ids.length }),
+        total: ids.length,
+        run: async ({ signal, update }) => {
+          let removed = 0;
+          try {
+            for (const slice of slices(ids, REMOVE_SLICE)) {
+              if (signal.aborted) break;
+              await backend.edits.removeFromCollection([...slice]);
+              removed += slice.length;
+              update({ done: removed });
+            }
+          } finally {
+            if (removed > 0) setTree(withSources(await backend.playlistTree()));
+          }
+          const noun = `${removed} track${removed === 1 ? "" : "s"}`;
+          report(removed < ids.length ? `Stopped: removed ${noun} from the collection.` : `Removed ${noun} from the collection.`);
+        },
       });
+      return true;
     },
-    [writeNow],
+    [jobs, report, t],
   );
 
   // A missing track's menu [OBS rekordbox 7.2.14, issue #201]. Auto
@@ -2792,6 +2865,9 @@ function AppBody() {
           onEditBlocked={readOnly ? explainEditLock : undefined}
           libraryGeneration={libraryGeneration}
           pendingEdits={pendingEdits}
+          pendingRows={jobList
+            .filter((job) => job.target !== null && job.target === selectedNode?.id)
+            .reduce((sum, job) => sum + job.pendingRows, 0)}
           title={selectedNode?.name ?? "Collection"}
           query={query}
           searchField={searchField}
@@ -2945,6 +3021,8 @@ function AppBody() {
       </div>
 
       <StatusBar
+        jobs={jobList}
+        onStopJob={stopJob}
         exports={(exportRunning ? exportBatch : []).map(job => ({
           ...job, name: devices.find(device => device.path === job.path)?.name ?? job.path.split(/[\\/]/).filter(Boolean).at(-1) ?? job.path,
         }))}

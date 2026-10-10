@@ -4,8 +4,13 @@ import type { ReactNode } from "react";
 import { useTooltip } from "@/store/usePreferences";
 import { refusal } from "@/lib/menu";
 import type { ExportProgress } from "@/ipc/types";
+import type { JobView } from "@/lib/jobQueue";
+import { useTranslation } from "@/i18n";
 
 export interface StatusBarProps {
+  /** Long library operations: the running one first, then those waiting. */
+  jobs?: readonly JobView[];
+  onStopJob?: ((id: number) => void) | undefined;
   exports?: readonly (ExportProgress & { name: string })[];
   /** The build's version, shown beside the name; null until it is read. */
   version?: string | null;
@@ -42,6 +47,8 @@ export interface StatusBarProps {
 }
 
 export function StatusBar({
+  jobs = [],
+  onStopJob,
   exports = [],
   version = null,
   activity = "",
@@ -63,6 +70,7 @@ export function StatusBar({
   updateNotice,
 }: StatusBarProps) {
   const tip = useTooltip();
+  const t = useTranslation();
   const analysisPercent = analysisProgress && analysisProgress.total > 0
     ? Math.min(100, Math.max(0, Math.floor(analysisProgress.completed / analysisProgress.total * 100))) : 0;
   const backupPercent = backupProgress && backupProgress.totalBytes > 0
@@ -111,6 +119,25 @@ export function StatusBar({
           Stop
         </button>
       ) : null}
+      {jobs.map((job) => {
+        const percent = job.total > 0 ? Math.min(100, Math.floor(job.done / job.total * 100)) : 0;
+        return (
+          <span key={job.id} className={styles.jobMeter} data-state={job.state}>
+            {onStopJob ? (
+              <button type="button" className={styles.stop} onClick={() => onStopJob(job.id)}
+                disabled={job.state === "stopping"} aria-label={`${t("Stop")}: ${job.label}`}>
+                {job.state === "stopping" ? t("Stopping…") : t("Stop")}
+              </button>
+            ) : null}
+            <span className={styles.jobLabel}>{job.label}</span>
+            {job.state === "queued" ? <span className={styles.jobQueued}>{t("Queued")}</span> : <>
+              <progress className={styles.backupProgress} aria-label={job.label} max={100}
+                value={job.total > 0 ? percent : undefined} />
+              <span className={styles.backupPercent}>{job.total > 0 ? `(${percent}%)` : ""}</span>
+            </>}
+          </span>
+        );
+      })}
       {error === null || error === "" ? null : (
         <span className={styles.error} role="alert">
           {error}

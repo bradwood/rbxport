@@ -1,5 +1,5 @@
 import { ConfirmHost } from "@/components/ConfirmDialog";
-import { DuplicateTracksDialog, type DuplicateAnswer } from "@/components/DuplicateTracksDialog";
+import type { DuplicateAnswer } from "@/components/DuplicateTracksDialog";
 import { JobQueue, slices, type JobView } from "@/lib/jobQueue";
 import { useBackupProgress } from "@/store/useBackupProgress";
 import { useExportProgress } from "@/store/useExportProgress";
@@ -55,7 +55,6 @@ import { asLayout, deckCount, isFullDeck, type PlayerLayout } from "@/lib/layout
 import { FIELD_LABEL, InfoPanel } from "@/views/info/InfoPanel";
 import { SubBrowser } from "@/views/subbrowser/SubBrowser";
 import { RightRail } from "@/views/browser/RightRail";
-import { DevicePanel } from "@/views/devices/DevicePanel";
 import { useColumns, type ColumnContext } from "@/store/useColumns";
 import { useExplorer } from "@/store/useExplorer";
 import { importLoose, isLooseId } from "@/lib/explorer";
@@ -71,9 +70,9 @@ import { PreferencesProvider, usePreferencesStore } from "@/store/usePreferences
 import type { PreferencePane } from "@/lib/preferences";
 import { answer, deckNumber, setPlaying, whenLoaded, withSetting, type ScriptHandler } from "@/lib/scripting";
 import { useAnalysis } from "@/store/useAnalysis";
-import { AnalysisDialog, type AnalysisChoice } from "@/views/analysis/AnalysisDialog";
+import type { AnalysisChoice } from "@/views/analysis/AnalysisDialog";
 import { autoAnalysisOffer, takeRemainingPages } from "@/lib/autoAnalysis";
-import { NewLibraryDialog, type LibraryQuestion } from "@/views/library/NewLibraryDialog";
+import type { LibraryQuestion } from "@/views/library/NewLibraryDialog";
 import type { QueueItem } from "@/lib/queue";
 import { TrackFilter } from "@/views/browser/TrackFilter";
 import { EMPTY_FILTER, toSpecFilter, type FilterState } from "@/lib/trackFilter";
@@ -92,6 +91,10 @@ const ROW_FIELDS: ReadonlySet<TrackField> = new Set<TrackField>([
   "title", "artist", "album", "genre", "label",
 ]);
 
+const DuplicateTracksDialog = lazy(() => import("@/components/DuplicateTracksDialog").then(m => ({ default: m.DuplicateTracksDialog })));
+const AnalysisDialog = lazy(() => import("@/views/analysis/AnalysisDialog").then(m => ({ default: m.AnalysisDialog })));
+const NewLibraryDialog = lazy(() => import("@/views/library/NewLibraryDialog").then(m => ({ default: m.NewLibraryDialog })));
+const DevicePanel = lazy(() => import("@/views/devices/DevicePanel").then(m => ({ default: m.DevicePanel })));
 const ReportBug = lazy(() => import("@/views/report/ReportBug").then(m => ({ default: m.ReportBug })));
 const UpdateManager = lazy(() => import("@/views/update/UpdateManager").then(m => ({ default: m.UpdateManager })));
 const Preferences = lazy(() => import("@/views/settings/Preferences").then(m => ({ default: m.Preferences })));
@@ -2838,14 +2841,14 @@ function AppBody() {
           aria-valuenow={treeWidth}
         />
         {selectedDevice ? (
-          <DevicePanel
+          <Suspense fallback={null}><DevicePanel
             device={selectedDevice}
             playlists={tree}
             onSync={syncToDevice}
             onRefresh={refreshDevices}
             onError={refuse}
             busy={syncing}
-          />
+          /></Suspense>
         ) : (
         <TrackTable
           // The cached screen may mount before the backend exists. Remount

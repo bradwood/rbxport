@@ -13,6 +13,7 @@ export interface ExportCounts {
   playlistsAdded?: number;
   playlistsRemoved?: number;
   skipped: string[];
+  failed?: string[];
   verified: boolean;
 }
 
@@ -31,6 +32,9 @@ export function exportSummary(name: string, report: ExportCounts): string {
 
   if (report.skipped.length > 0) {
     parts.push(`${plural(report.skipped.length, "track")} missing`);
+  }
+  if (report.failed && report.failed.length > 0) {
+    parts.push(`${plural(report.failed.length, "track")} failed`);
   }
   if (!report.verified) parts.push("but the result did not read back");
   return `${parts.join(". ")}.`;

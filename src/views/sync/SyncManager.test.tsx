@@ -52,7 +52,7 @@ const STATES: Record<string, DeviceSyncState> = {
 
 const report = (path: string, tracks: number): SyncDeviceReport => ({
   path,
-  report: { tracks, playlists: 1, bytesCopied: 0, analysisFiles: 0, reused: 0, removed: 0, tracksAdded: tracks, tracksUpdated: 0, playlistsAdded: 1, playlistsRemoved: 0, skipped: [], verified: true },
+  report: { tracks, playlists: 1, bytesCopied: 0, analysisFiles: 0, reused: 0, removed: 0, tracksAdded: tracks, tracksUpdated: 0, playlistsAdded: 1, playlistsRemoved: 0, skipped: [], failed: [], verified: true },
 });
 
 let host: HTMLDivElement;
@@ -64,6 +64,7 @@ let readTree: () => Promise<TreeNode[]>;
 let listDevices: ReturnType<typeof vi.fn>;
 let importUsb: ReturnType<typeof vi.fn>;
 let syncDevices: ReturnType<typeof vi.fn>;
+let tell: ReturnType<typeof vi.fn>;
 let validateExportFiles: ReturnType<typeof vi.fn>;
 let confirmExport: ReturnType<typeof vi.fn>;
 let ejectDevice: ReturnType<typeof vi.fn>;
@@ -116,6 +117,7 @@ beforeEach(async () => {
   syncDevices = vi.fn((playlists: string[], destinations: string[]) =>
     Promise.resolve(destinations.map((path) => report(path, playlists.length * 10))),
   );
+  tell = vi.fn(() => Promise.resolve());
   validateExportFiles = vi.fn(() => Promise.resolve([]));
   confirmExport = vi.fn(() => Promise.resolve(true));
   itunesLibrary = null;
@@ -140,6 +142,7 @@ beforeEach(async () => {
       return state ? Promise.resolve(state) : Promise.reject(new Error("gone"));
     },
     syncDevices,
+    tell,
     validateExportFiles,
     cancelExport,
     ejectDevice,
@@ -630,6 +633,19 @@ describe("SyncManager", () => {
     click(host.querySelector<HTMLButtonElement>('button[aria-label="SYNC"]'));
     await settle();
     expect(status()).toContain("The USB ran out of space.");
+  });
+
+  it("finishes the sync and lists the tracks that could not be written", async () => {
+    syncDevices.mockResolvedValueOnce([
+      { ...report("/Volumes/USB A", 5), report: { ...report("/Volumes/USB A", 5).report, failed: ["Move For Me: Could not copy it to the USB: unsupported audio"] } },
+    ]);
+    click(box("USB A"));
+    await settle();
+    click(host.querySelector<HTMLButtonElement>('button[aria-label="SYNC"]'));
+    await settle();
+    expect(tell).toHaveBeenCalledTimes(1);
+    expect(tell.mock.calls[0]?.[0]).toContain("Move For Me: Could not copy it to the USB: unsupported audio");
+    expect(status()).toContain("Sync complete.");
   });
 
   it("requests post-sync ejection and distinguishes eject errors from sync errors", async () => {

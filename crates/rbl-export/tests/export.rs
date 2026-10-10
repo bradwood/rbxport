@@ -801,3 +801,33 @@ fn a_track_with_more_text_than_a_pdb_row_holds_is_refused_by_name() {
     assert!(!dest.path().join("PIONEER/rekordbox/export.pdb").exists());
     assert!(!dest.path().join("Contents/TRIODE").exists());
 }
+
+#[test]
+fn a_track_that_cannot_be_converted_is_reported_and_the_rest_still_sync() {
+    use rbl_export::{CompatibilityFormat, ExportOptions, export_with_options};
+    let src = tempfile::tempdir().unwrap();
+    let dest = tempfile::tempdir().unwrap();
+    let flac = include_bytes!("../../rbl-audio/tests/fixtures/stereo-96k.flac");
+    let mut tracks = Vec::new();
+    for (id, title, bytes) in [
+        (1, "Good", flac.to_vec()),
+        (2, "Garbage", vec![7_u8; 4096]),
+        (3, "Truncated", flac[..flac.len() / 2].to_vec()),
+    ] {
+        let path = src.path().join(format!("{id}.flac"));
+        std::fs::write(&path, bytes).unwrap();
+        tracks.push(SourceTrack { id, source_path: path, title: title.into(), artist: "A".into(), ..Default::default() });
+    }
+    let playlists = vec![SourcePlaylist { id: 1, name: "Set".into(), track_indices: vec![0, 1, 2], ..Default::default() }];
+
+    let report = export_with_options(dest.path(), &tracks, &playlists, &[],
+        &ExportOptions { compatibility: Some(CompatibilityFormat::Wav), ..Default::default() }, &mut |_| {}).unwrap();
+    assert_eq!(report.tracks, 1);
+    assert_eq!(report.failed.len(), 2, "{:?}", report.failed);
+    assert!(report.failed.iter().any(|f| f.starts_with("Garbage: ")));
+    assert!(report.failed.iter().any(|f| f.starts_with("Truncated: ")));
+    assert_eq!(report.tracks_added, 1);
+    assert!(verify(dest.path()).unwrap().is_ok());
+    let wavs = std::fs::read_dir(dest.path().join("Contents")).unwrap().count();
+    assert!(wavs > 0);
+}

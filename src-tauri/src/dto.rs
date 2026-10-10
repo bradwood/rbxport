@@ -402,6 +402,9 @@ pub struct ExportReportDto {
     pub playlists_removed: u32,
     /// Tracks left out because their audio was missing or unreadable.
     pub skipped: Vec<String>,
+    /// Tracks left out because they could not be read, converted or copied,
+    /// as "title: reason". The sync carried on without them.
+    pub failed: Vec<String>,
     /// Whether the export read back correctly with the independent parser.
     pub verified: bool,
 }

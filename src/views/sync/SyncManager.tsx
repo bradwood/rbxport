@@ -48,6 +48,9 @@ type Tick = "on" | "off" | "some";
 
 /** What Import can bring back from a stick, in the order it does them. */
 type ImportKind = "cues" | "history" | "settings";
+/** How many left-out tracks the sync-finished dialog lists before pointing at the log. */
+const MAX_FAILURES_SHOWN = 10;
+
 const IMPORT_KINDS: readonly { kind: ImportKind; label: string; noun: string }[] = [
   { kind: "cues", label: "Cues and beat grids", noun: "cues and beat grids" },
   { kind: "history", label: "Play history", noun: "play history" },
@@ -621,6 +624,18 @@ export function SyncManager({ windowed = false, onClose, onSynced, onReady }: Sy
           : r.ejected ? [`${nameOf(r.path)}: Safely ejected.`]
           : r.ejectError ? [`${nameOf(r.path)}: Not ejected: ${r.ejectError}`] : []);
         setStatus([...importNotes, ...(outcomes.length > 0 ? outcomes : [t("Sync complete.")])]);
+        // A track that could not be written does not stop the sync; tell the
+        // user which ones were left out and why.
+        const failures = reports.flatMap(r => (r.report?.failed ?? []).map(f => `${nameOf(r.path)}: ${f}`));
+        if (failures.length > 0) {
+          const shown = failures.slice(0, MAX_FAILURES_SHOWN);
+          const more = failures.length - shown.length;
+          void backend.tell(
+            [t("The sync finished, but these tracks could not be written and were left out:"), ...shown,
+              ...(more > 0 ? [t("…and {count} more. See the log for the full list.", { count: more })] : [])].join("\n\n"),
+            t("Some tracks were left out"),
+          );
+        }
         // What the sticks hold now, without touching the ticks.
         await refreshDevices().catch(() => {});
         await Promise.all(reports.filter(r => !r.ejected).map(({ path }) => readDevice(path, false).catch(() => {})));

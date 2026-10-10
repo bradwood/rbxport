@@ -1089,7 +1089,7 @@ fn sync_one_device<R: tauri::Runtime>(
         Ok(report) => {
             let mut result = SyncDeviceReportDto { path: destination.clone(), report: Some(report), error: None, ejected: false, eject_error: None };
             if eject_after_sync {
-                if result.report.as_ref().is_some_and(|report| report.verified && report.skipped.is_empty()) {
+                if result.report.as_ref().is_some_and(|report| report.verified && report.skipped.is_empty() && report.failed.is_empty()) {
                     progress("ejecting");
                     set_export_stage(app, stick, "ejecting");
                     match rbl_devices::eject::eject(stick) {
@@ -1842,6 +1842,7 @@ fn write_export_with_phase(
         playlists_added: u32::try_from(report.playlists_added).unwrap_or(0),
         playlists_removed: u32::try_from(report.playlists_removed).unwrap_or(0),
         skipped: report.skipped,
+        failed: report.failed,
         verified: check.is_ok() && check.tracks == report.tracks,
     })
 }

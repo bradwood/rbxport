@@ -1292,6 +1292,8 @@ export interface ExportReport {
   playlistsRemoved: number;
   /** Tracks left out because their audio was missing or unreadable. */
   skipped: string[];
+  /** Tracks left out because they could not be read, converted or copied, as "title: reason". The sync carried on without them. */
+  failed: string[];
   /** Whether the export read back correctly with the independent parser. */
   verified: boolean;
 }

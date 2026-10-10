@@ -192,6 +192,10 @@ pub struct ExportReport {
     pub pdb_bytes: usize,
     /// Tracks skipped because their audio was missing or unreadable.
     pub skipped: Vec<String>,
+    /// Tracks left out because their audio could not be read, converted or
+    /// copied, as "title: reason". The rest of the export carries on without
+    /// them.
+    pub failed: Vec<String>,
     /// Tracks whose audio was already on the stick, unchanged, and left alone.
     pub reused: usize,
     /// What not copying them saved.
@@ -867,9 +871,15 @@ pub fn export_cancellable(
         let conversion = compatibility.filter(|_| !track.device.as_ref().is_some_and(|d| d.preserve))
             .map(CompatibilityFormat::audio);
         let conversion = match conversion {
-            Some(target) if rbl_audio::compatibility::needs_conversion(&track.source_path)
-                .map_err(|e| std::io::Error::other(format!("{}: {e}", track.title)))? => Some(target),
-            _ => None,
+            Some(target) => match rbl_audio::compatibility::needs_conversion(&track.source_path) {
+                Ok(true) => Some(target),
+                Ok(false) => None,
+                Err(e) => {
+                    fail_track(&mut report, track, &format!("Could not read the audio: {e}"));
+                    continue;
+                }
+            },
+            None => None,
         };
         if let Some(target) = conversion {
             let stem = Path::new(&place.file_name).file_stem().unwrap_or_default().to_string_lossy();
@@ -900,7 +910,16 @@ pub fn export_cancellable(
         // conversion or an analysis collision: point at it, copy nothing.
         let in_place = in_place_paths.get(index).and_then(Option::as_deref) == Some(place.audio.as_str());
         let profile = conversion.map_or("", rbl_audio::compatibility::Format::profile);
-        let source_hash = if conversion.is_some() { file_hash(&track.source_path)? } else { 0 };
+        let source_hash = if conversion.is_some() {
+            match file_hash(&track.source_path) {
+                Ok(hash) => hash,
+                Err(e) if is_device_gone(&e) => return Err(ExportError::DeviceGone),
+                Err(e) => {
+                    fail_track(&mut report, track, &format!("Could not read the audio: {e}"));
+                    continue;
+                }
+            }
+        } else { 0 };
         let carried = stale.remove(&key);
         if carried.is_none() { report.tracks_added += 1; }
         let audio_dest = under(destination, &place.audio);
@@ -960,11 +979,17 @@ pub fn export_cancellable(
             };
             match written {
                 Ok(bytes) => { output_size = bytes; report.bytes_copied += bytes; },
-                Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
-                    return Err(ExportError::Conflict(format!("Source disappeared while copying '{}': {e}", track.title)));
-                }
                 Err(e) if is_device_gone(&e) => return Err(ExportError::DeviceGone),
-                Err(e) => return Err(context(format!("Could not copy '{}' to the USB", track.title))(e).into()),
+                Err(e) => {
+                    // One bad file must not stop the sync. Take back what this
+                    // track had counted, leave any earlier copy to be handled
+                    // as for a track that is no longer selected, and go on.
+                    let _ = std::fs::remove_file(&audio_dest);
+                    if carried.is_some() { report.tracks_updated -= 1; } else { report.tracks_added -= 1; }
+                    if let Some(c) = carried { stale.insert(key, c); }
+                    fail_track(&mut report, track, &format!("Could not copy it to the USB: {e}"));
+                    continue;
+                }
             }
         }
 
@@ -1867,6 +1892,12 @@ pub fn copy_my_settings(destination: &Path, source: &Path) -> Result<usize> {
 /// An I/O error that says what was being done when it happened, keeping its
 /// kind; the bare OS text ("No such file or directory") names nothing a
 /// user can act on.
+/// Records a track the export is going on without.
+fn fail_track(report: &mut ExportReport, track: &SourceTrack, reason: &str) {
+    tracing::warn!(title = %track.title, path = %track.source_path.display(), %reason, "track left out of the export");
+    report.failed.push(format!("{}: {reason}", track.title));
+}
+
 fn context(what: String) -> impl Fn(std::io::Error) -> std::io::Error {
     move |error| std::io::Error::new(error.kind(), format!("{what}: {error}"))
 }

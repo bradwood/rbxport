@@ -893,7 +893,7 @@ export function createMockBackend(options: MockOptions = {}): Backend {
       tracksUpdated: 0,
       playlistsAdded,
       playlistsRemoved,
-      skipped: [],
+      skipped: [], failed: [],
       verified: true,
     };
   };
@@ -2023,7 +2023,7 @@ export function createMockBackend(options: MockOptions = {}): Backend {
         const tracks = playlistSize(playlistId);
         return wait({
           tracks, playlists: 1, bytesCopied: tracks * 8_000_000, analysisFiles: tracks,
-          reused: 0, removed: 0, tracksAdded: tracks, tracksUpdated: 0, playlistsAdded: 1, playlistsRemoved: 0, skipped: [], verified: true,
+          reused: 0, removed: 0, tracksAdded: tracks, tracksUpdated: 0, playlistsAdded: 1, playlistsRemoved: 0, skipped: [], failed: [], verified: true,
         });
       }
       return mockExport(destination, () => writeTo(device, [playlistId], defaults, deleteUnlistedMusic));
@@ -2067,7 +2067,7 @@ export function createMockBackend(options: MockOptions = {}): Backend {
         }
         if (device) {
           const report = writeTo(device, playlists, defaults, deleteUnlistedMusic);
-          const ejected = Boolean(ejectAfterSync && report.verified && report.skipped.length === 0);
+          const ejected = Boolean(ejectAfterSync && report.verified && report.skipped.length === 0 && report.failed.length === 0);
           if (ejected) {
             tell("ejecting");
             devices.splice(devices.indexOf(device), 1);

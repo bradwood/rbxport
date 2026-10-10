@@ -5,6 +5,7 @@
  * so the IPC surface stays auditable and the mock can stand in wholesale.
  */
 import { detectPlatform } from "@/lib/shortcuts";
+import { confirmHandler } from "./confirmHost";
 import type {
   AnalysisResult, AudioDevices, Backend, Backup, BackupProgress, BackupSizes, ConfirmReplace, Cue, SyncEstimate, DeckEvent, Device, DeviceLibrary,
   DevicePlaylistEditResult, DeviceSettings, DeviceSyncState,
@@ -303,6 +304,8 @@ async function realBackend(): Promise<Backend> {
     setBackupDirectory: (directory) => invoke<string>("set_backup_directory", { directory }),
     deleteBackup: (path) => invoke<void>("delete_backup", { path }),
     confirm: async (message, labels) => {
+      const inApp = confirmHandler();
+      if (inApp) return inApp(message, labels);
       const { ask } = await import("@tauri-apps/plugin-dialog");
       return ask(message, {
         kind: "warning",

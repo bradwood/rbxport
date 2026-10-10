@@ -1,3 +1,4 @@
+import { ConfirmHost } from "@/components/ConfirmDialog";
 import { useBackupProgress } from "@/store/useBackupProgress";
 import { useExportProgress } from "@/store/useExportProgress";
 import { reportStartupPaint } from "@/lib/startup";
@@ -2546,6 +2547,7 @@ function AppBody() {
   return (
     <PreferencesProvider value={prefs}>
     <MasterOutputConnection mode={viewPrefs.vuMeter} />
+    <ConfirmHost />
     <div className={styles.window} data-platform={platform.linux ? "linux" : platform.mac ? "mac" : "windows"}>
       <div
         className={styles.titleBar}

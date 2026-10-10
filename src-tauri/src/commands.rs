@@ -1097,7 +1097,22 @@ fn sync_one_device<R: tauri::Runtime>(
                         Err(e) => result.eject_error = Some(e.to_string()),
                     }
                 } else {
-                    result.eject_error = Some("The sync was incomplete or could not be verified. Review it before ejecting.".to_owned());
+                    result.eject_error = result.report.as_ref().map(|report| {
+                        let mut causes = Vec::new();
+                        if !report.skipped.is_empty() {
+                            causes.push(format!("{} missing or unreadable", report.skipped.len()));
+                        }
+                        if !report.failed.is_empty() {
+                            causes.push(format!("{} could not be written", report.failed.len()));
+                        }
+                        if !report.verified {
+                            causes.push("the written library did not read back correctly".to_owned());
+                        }
+                        format!(
+                            "The sync was incomplete or could not be verified ({}). Review it before ejecting.",
+                            causes.join(", ")
+                        )
+                    });
                 }
             }
             progress("done");

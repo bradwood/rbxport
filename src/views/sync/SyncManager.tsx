@@ -160,6 +160,8 @@ export function SyncManager({ windowed = false, onClose, onSynced, onReady }: Sy
   /** What is happening now, or what happened: one line, or one per stick. */
   const [status, setStatus] = useState<string[]>([]);
   const [showStatusDetails, setShowStatusDetails] = useState(false);
+  // What the status line summarises: the tracks left out, one to a line.
+  const [statusDetail, setStatusDetail] = useState<string[]>([]);
   const [lastImport, setLastImport] = useState<readonly ImportKind[] | null>(null);
   const [importFailed, setImportFailed] = useState(false);
   const [completedReports, setCompletedReports] = useState<ReadonlyMap<string, ExportReport>>(new Map());
@@ -582,6 +584,7 @@ export function SyncManager({ windowed = false, onClose, onSynced, onReady }: Sy
     setOperation("sync");
     setCompletedReports(new Map());
     setStatus([t("Preparing for export…")]);
+    setStatusDetail([]);
     void (async () => {
       let stop = () => {};
       try {
@@ -640,6 +643,11 @@ export function SyncManager({ windowed = false, onClose, onSynced, onReady }: Sy
           : r.ejected ? [`${nameOf(r.path)}: Safely ejected.`]
           : r.ejectError ? [`${nameOf(r.path)}: Not ejected: ${r.ejectError}`] : []);
         setStatus([...importNotes, ...(outcomes.length > 0 ? outcomes : [t("Sync complete.")])]);
+        setStatusDetail(reports.flatMap(r => [
+          ...(r.report?.skipped ?? []).map(track => `${nameOf(r.path)}: ${t("Missing or unreadable")}: ${track}`),
+          ...(r.report?.failed ?? []).map(track => `${nameOf(r.path)}: ${t("Could not be written")}: ${track}`),
+          ...(r.report && !r.report.verified ? [`${nameOf(r.path)}: ${t("The written library did not read back correctly.")}`] : []),
+        ]));
         // A track that could not be written does not stop the sync; tell the
         // user which ones were left out and why.
         const failures = reports.flatMap(r => (r.report?.failed ?? []).map(f => `${nameOf(r.path)}: ${f}`));
@@ -1027,10 +1035,12 @@ export function SyncManager({ windowed = false, onClose, onSynced, onReady }: Sy
           {busy ? <LoaderCircle size={16} className={styles.spinner} aria-hidden="true" /> : null}
           <div className={showStatusDetails ? styles.statusDetails : undefined} title={status.join("\n")}>
           {status.length > 0 ? status.join(" · ") : null}
+          {showStatusDetails && statusDetail.length > 0
+            ? <ul className={styles.statusList}>{statusDetail.map((line, i) => <li key={i}>{line}</li>)}</ul> : null}
           {status.length === 0 ? <span className={styles.selectionSummary}>{selectionSummary}</span> : null}
           {status.length === 0 ? <span id="sync-selection-hint" className={styles.idleStatus} data-warn={rekordboxOpen || undefined}>{syncHint}</span> : null}
           </div>
-          {status.length > 1 || importFailed ? <button type="button" className={styles.detailsButton} onClick={() => setShowStatusDetails(open => !open)}>
+          {status.length > 1 || importFailed || statusDetail.length > 0 ? <button type="button" className={styles.detailsButton} onClick={() => setShowStatusDetails(open => !open)}>
             {showStatusDetails ? "Hide details" : "Show details"}
           </button> : null}
         </div>

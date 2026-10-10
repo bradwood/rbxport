@@ -295,6 +295,7 @@
 }
 .status > div { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .status > .statusDetails { overflow: visible; white-space: normal; overflow-wrap: anywhere; }
+.statusList { margin: 4px 0 0; padding-left: 18px; max-height: 120px; overflow-y: auto; }
 .status[data-error] { color: var(--c-error); }
 .detailsButton { flex: none; border: 0; background: none; color: var(--c-accent); font: inherit; cursor: pointer; }
 .idleStatus { color: var(--c-text-dim); }

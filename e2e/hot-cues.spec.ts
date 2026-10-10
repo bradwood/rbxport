@@ -229,14 +229,17 @@ test("with Q on, a call on a playing deck waits for the beat and keeps it", asyn
   await expect(pauseButton(page)).toBeVisible();
   await page.waitForTimeout(600);
 
-  // The head, read every few ms from just before the press of A.
+  // The head, read every few ms from just before the press of A. Brought up
+  // to the moment of each reading (`aNow`), not the mock's last tick: on a
+  // busy runner a late tick and the jump can fall between two readings, and
+  // the tick's step then reads as part of the jump.
   const heads = page.evaluate(async () => {
-    const read = (window as unknown as { __deckSeconds: () => { a: number; beatA: number } }).__deckSeconds;
+    const read = (window as unknown as { __deckSeconds: () => { aNow: number; beatA: number } }).__deckSeconds;
     const out: { a: number; beat: number; at: number }[] = [];
     const end = performance.now() + 1800;
     while (performance.now() < end) {
-      const { a, beatA } = read();
-      out.push({ a, beat: beatA, at: performance.now() });
+      const { aNow, beatA } = read();
+      out.push({ a: aNow, beat: beatA, at: performance.now() });
       await new Promise((done) => setTimeout(done, 4));
     }
     return out;
@@ -246,10 +249,13 @@ test("with Q on, a call on a playing deck waits for the beat and keeps it", asyn
   const all = await heads;
   const beat = all[0]!.beat;
   expect(beat).toBeGreaterThan(0.2);
+  // Where the head would have been at a reading had it only played on from
+  // the one before.
+  const playedOn = (n: number) => all[n - 1]!.a + (all[n]!.at - all[n - 1]!.at) / 1000;
   // The jump: the one step that moves far, from B's region to A's cue.
-  const jump = all.findIndex((sample, n) => n > 0 && Math.abs(sample.a - all[n - 1]!.a) > 0.3);
+  const jump = all.findIndex((sample, n) => n > 0 && Math.abs(sample.a - playedOn(n)) > 0.3);
   expect(jump).toBeGreaterThan(0);
-  const before = all[jump - 1]!.a;
+  const before = playedOn(jump);
   const after = all[jump]!.a;
   // Where it left and where it landed are the same place in a beat: the
   // jump waited for the step instead of cutting the beat short. On the mock

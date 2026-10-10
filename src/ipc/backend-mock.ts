@@ -1555,10 +1555,13 @@ export function createMockBackend(options: MockOptions = {}): Backend {
   if (typeof window !== "undefined") {
     (window as unknown as {
       __deckSeconds: () => {
-        a: number; b: number; beat: number; beatA: number; looping: boolean; loopingA: boolean; playingB: boolean;
+        a: number; aNow: number; b: number; beat: number; beatA: number; looping: boolean; loopingA: boolean; playingB: boolean;
       };
     }).__deckSeconds = () => ({
       a: deckA.frames / SAMPLE_RATE,
+      // A's head brought up to now rather than to the last tick, for a test
+      // that times a jump against a busy runner's late ticks.
+      aNow: (deckA.frames + (deckA.playing ? Math.max(0, performance.now() - Math.max(clockAt, deckA.startsAt)) / 1000 * SAMPLE_RATE : 0)) / SAMPLE_RATE,
       b: deckB.frames / SAMPLE_RATE,
       beat: deckBeat.b,
       beatA: deckBeat.a,

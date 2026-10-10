@@ -3090,9 +3090,19 @@ fn removing_tracks_in_a_batch_leaves_what_removing_them_one_at_a_time_does() {
         "SELECT COALESCE(int_1, 0) FROM agentRegistry WHERE registry_id = 'localUpdateCount'",
         &[],
     );
+    // The fixture library already files these tracks in playlists of its own,
+    // so the memberships are counted rather than assumed.
+    let memberships: i64 = removed
+        .iter()
+        .map(|t| batched.one::<i64>(
+            "SELECT COUNT(*) FROM djmdSongPlaylist WHERE rb_local_deleted = 0 AND ContentID = ?1",
+            &[t],
+        ))
+        .sum();
+    assert!(memberships >= 5);
     let changed = batched.writer.delete_tracks(&removed).unwrap();
-    // Three tracks, and the memberships of 2 (one), 3 (two) and 7 (two).
-    assert_eq!(changed.rows, 3 + 5);
+    // Three tracks, and every membership they had.
+    assert_eq!(changed.rows, 3 + memberships as usize);
 
     assert_eq!(batched.order(&a2), one_by_one.order(&a1));
     assert_eq!(batched.order(&b2), one_by_one.order(&b1));

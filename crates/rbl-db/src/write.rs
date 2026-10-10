@@ -835,20 +835,29 @@ impl Writer {
             |r| r.get(0),
         )?;
 
+        // The playlist's members, read once: a lookup per dropped track scans
+        // the whole membership table, which takes minutes for a few hundred.
+        let mut members: std::collections::HashSet<String> = {
+            let mut stmt = tx.prepare(
+                "SELECT ContentID FROM djmdSongPlaylist
+                 WHERE PlaylistID = ?1 AND rb_local_deleted = 0",
+            )?;
+            let found = stmt
+                .query_map(params![playlist], |r| r.get::<_, String>(0))?
+                .collect::<rusqlite::Result<_>>()?;
+            found
+        };
+
         let mut rows = 0;
         let mut usn = 0;
         for (content, (row_id, uuid)) in contents.iter().zip(ids) {
-            let already: i64 = tx.query_row(
-                "SELECT COUNT(*) FROM djmdSongPlaylist
-                 WHERE PlaylistID = ?1 AND ContentID = ?2 AND rb_local_deleted = 0",
-                params![playlist, content],
-                |r| r.get(0),
-            )?;
-            if already > 0 {
+            if !members.insert(content.clone()) {
                 continue;
             }
             track_no += 1;
-            usn = next_usn(&tx)?;
+            // `next_usn` scans every sync table, so it is read once and
+            // counted up from there: this loop is the only writer.
+            usn = if rows == 0 { next_usn(&tx)? } else { usn + 1 };
             rows += tx.execute(
                 "INSERT INTO djmdSongPlaylist
                     (ID, PlaylistID, ContentID, TrackNo, UUID,

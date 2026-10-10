@@ -378,6 +378,18 @@ fn tracks_append_with_contiguous_numbering() {
 }
 
 #[test]
+fn a_track_listed_twice_in_one_drop_is_added_once() {
+    let mut f = fixture();
+    let list = f.writer.create_playlist("Set", ROOT).unwrap();
+    f.writer.add_tracks(&list, &[track_id(1)]).unwrap();
+    let drop = [track_id(0), track_id(1), track_id(0), track_id(2)];
+    let changed = f.writer.add_tracks(&list, &drop).unwrap();
+    assert_eq!(changed.rows, 2);
+    assert_eq!(f.order(&list), [track_id(1), track_id(0), track_id(2)]);
+    assert_eq!(f.track_numbers(&list), vec![1, 2, 3]);
+}
+
+#[test]
 fn a_membership_row_is_identified_by_a_uuid_not_a_number() {
     let mut f = fixture();
     let list = f.writer.create_playlist("Set", ROOT).unwrap();

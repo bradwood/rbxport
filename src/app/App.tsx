@@ -52,7 +52,7 @@ import { useUpdater } from "@/store/useUpdater";
 import { UpdateReadyNotice } from "@/views/update/UpdateReadyNotice";
 import { MasterOutputProvider, MasterOutputConnection, useMasterControls, useMasterDisplay } from "@/store/MasterOutput";
 import { asLayout, deckCount, isFullDeck, type PlayerLayout } from "@/lib/layout";
-import { FIELD_LABEL, InfoPanel } from "@/views/info/InfoPanel";
+import { FIELD_LABEL } from "@/views/info/fieldLabel";
 import { SubBrowser } from "@/views/subbrowser/SubBrowser";
 import { RightRail } from "@/views/browser/RightRail";
 import { DevicePanel } from "@/views/devices/DevicePanel";
@@ -92,6 +92,7 @@ const ROW_FIELDS: ReadonlySet<TrackField> = new Set<TrackField>([
   "title", "artist", "album", "genre", "label",
 ]);
 
+const InfoPanel = lazy(() => import("@/views/info/InfoPanel").then(m => ({ default: m.InfoPanel })));
 const ReportBug = lazy(() => import("@/views/report/ReportBug").then(m => ({ default: m.ReportBug })));
 const UpdateManager = lazy(() => import("@/views/update/UpdateManager").then(m => ({ default: m.UpdateManager })));
 const Preferences = lazy(() => import("@/views/settings/Preferences").then(m => ({ default: m.Preferences })));
@@ -2936,7 +2937,7 @@ function AppBody() {
           />
         ) : null}
         {infoOpen ? (
-          <InfoPanel
+          <Suspense fallback={null}><InfoPanel
             // The browser's selection, as rekordbox's Information Window
             // follows it; the deck's track only when nothing is selected —
             // never for a multiple selection, which the panel shows as one.
@@ -2947,7 +2948,7 @@ function AppBody() {
             onRate={rateTracks}
             onComment={commentTracks}
             onEdit={runEdit}
-          />
+          /></Suspense>
         ) : null}
         <RightRail
           className={styles.rightRail}

@@ -867,6 +867,31 @@ fn tone_hz(left: &[f32], rate: u32) -> f32 {
     rate as f32 / periods[periods.len() / 2] as f32
 }
 
+/// Frames of the deck's own audio in the output, for timing what it played.
+///
+/// An underrun on a busy machine leaves output that is not the deck playing
+/// slower, and none of it moves the playhead. Running dry, the mixer holds
+/// the last frame and fades it down over its 88-frame ramp rather than
+/// cutting it, and the silence after that is not exact zeros but the decaying
+/// tail of the output stage, around 1e-5. Counting every frame that was not
+/// exactly 0.0 took both for the deck: a busy Linux runner read 2.58 seconds
+/// for two seconds of track, and pulling as fast as possible here reads half
+/// as much again. So only frames loud enough to be the tone count, less one
+/// fade for every gap the deck ran dry into.
+fn deck_frames(out: &[f32]) -> usize {
+    const FADE_FRAMES: usize = 88;
+    let audible: Vec<bool> = out.chunks_exact(2).map(|f| f[0].abs() > 1e-3 || f[1].abs() > 1e-3).collect();
+    let frames = audible.iter().filter(|&&on| on).count();
+    // Two quiet frames in a row is a gap. The tone itself is never below the
+    // threshold for more than one: at 440 Hz it moves by about 0.05 a frame.
+    let gaps = audible
+        .chunk_by(|a, b| a == b)
+        .skip_while(|run| !run[0])
+        .filter(|run| !run[0] && run.len() >= 2)
+        .count();
+    frames.saturating_sub(gaps * FADE_FRAMES)
+}
+
 /// Frequency over the settled middle of a tone, left channel.
 fn hz_of(out: &[f32], rate: u32) -> f32 {
     let left: Vec<f32> = out.chunks_exact(2).map(|f| f[0]).collect();
@@ -900,9 +925,7 @@ fn a_key_shift_of_an_octave_doubles_the_pitch_and_keeps_the_tempo() {
     let hz = hz_of(&out[out.len() * 3 / 4..], RATE);
     assert!((hz - 440.0).abs() < 8.0, "an octave up from 220 Hz reads {hz} Hz");
     // Two seconds of track took about two seconds of output: the tempo held.
-    // Only frames that carry audio count, since an underrun on a busy machine
-    // pads the output with silence that is not the deck playing slower.
-    let frames_out = out.chunks_exact(2).filter(|f| f[0] != 0.0 || f[1] != 0.0).count();
+    let frames_out = deck_frames(&out);
     assert!((frames_out as f32 / RATE as f32 - 2.0).abs() < 0.25, "{frames_out} output frames for two seconds of track");
 
     // Back to the track's own key, still at its own speed.

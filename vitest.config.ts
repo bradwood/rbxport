@@ -9,5 +9,8 @@ export default defineConfig({
     // with a docblock of their own, so everything else stays in node.
     include: ["src/**/*.test.ts", "src/**/*.test.tsx", "design/**/*.test.ts", "scripts/cleanup.test.mjs"],
     reporters: "dot",
+    // The shared CI runner can be loaded enough that a component test spends
+    // more than the default 5 s importing its modules.
+    testTimeout: 20_000,
   },
 });

@@ -815,6 +815,13 @@ impl Writer {
     /// `TrackNo` stays contiguous from 1, which is true of every playlist in
     /// the reference library.
     pub fn add_tracks(&mut self, playlist: &str, contents: &[String]) -> Result<Changed> {
+        self.add_tracks_allowing(playlist, contents, false)
+    }
+
+    /// [`Writer::add_tracks`], with the choice of what a track already in the
+    /// playlist does: left out when `allow_duplicates` is false, added again
+    /// on the end when it is true.
+    pub fn add_tracks_allowing(&mut self, playlist: &str, contents: &[String], allow_duplicates: bool) -> Result<Changed> {
         self.prepare()?;
         let stamp = time::now();
         let mut ids: Vec<(String, String)> = Vec::with_capacity(contents.len());
@@ -851,7 +858,7 @@ impl Writer {
         let mut rows = 0;
         let mut usn = 0;
         for (content, (row_id, uuid)) in contents.iter().zip(ids) {
-            if !members.insert(content.clone()) {
+            if !members.insert(content.clone()) && !allow_duplicates {
                 continue;
             }
             track_no += 1;

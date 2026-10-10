@@ -248,9 +248,9 @@ fn a_playlist_folder_lists_unique_tracks_from_nested_playlists() {
     let friday = s.node("Friday");
     let saturday = s.node("Saturday");
     let outside = s.node("Outside");
-    run(commands::add_tracks_to_playlist(s.handle(), s.state(), friday.id, vec![track_id(3), track_id(1)])).unwrap();
-    run(commands::add_tracks_to_playlist(s.handle(), s.state(), saturday.id, vec![track_id(1), track_id(2)])).unwrap();
-    run(commands::add_tracks_to_playlist(s.handle(), s.state(), outside.id, vec![track_id(4)])).unwrap();
+    run(commands::add_tracks_to_playlist(s.handle(), s.state(), friday.id, vec![track_id(3), track_id(1)], None)).unwrap();
+    run(commands::add_tracks_to_playlist(s.handle(), s.state(), saturday.id, vec![track_id(1), track_id(2)], None)).unwrap();
+    run(commands::add_tracks_to_playlist(s.handle(), s.state(), outside.id, vec![track_id(4)], None)).unwrap();
 
     let (view, len) = s.open(playlist_folder_spec(&shows.id));
     assert_eq!(len, 3);
@@ -447,6 +447,7 @@ fn a_playlist_is_made_filled_reordered_renamed_moved_and_deleted() {
         s.state(),
         friday.id.clone(),
         vec![t3.clone(), t1.clone(), t2.clone()],
+        None
     ))
     .unwrap();
     let rows = s.playlist_rows(&friday.id);
@@ -514,6 +515,7 @@ fn a_deleted_playlist_tree_can_be_undone_and_redone() {
         s.state(),
         playlist.id.clone(),
         tracks.clone(),
+        None
     )).unwrap();
 
     let deleted = run(commands::delete_playlist(s.handle(), s.state(), folder.id.clone())).unwrap();
@@ -564,6 +566,7 @@ fn library_history_names_and_reverses_each_supported_edit() {
     let tracks = vec![track_id(1), track_id(2), track_id(3)];
     run(commands::add_tracks_to_playlist(
         s.handle(), s.state(), playlist.id.clone(), tracks.clone(),
+        None
     )).unwrap();
     let removed = run(commands::remove_tracks_from_playlist(
         s.handle(), s.state(), playlist.id.clone(), vec![tracks[1].clone()],
@@ -614,7 +617,7 @@ fn removing_several_tracks_from_the_collection_removes_every_one() {
     run(commands::create_playlist(s.handle(), s.state(), "Set".into(), ROOT.into(), None)).unwrap();
     let playlist = s.node("Set").id;
     let members = vec![track_id(1), track_id(2), track_id(3), track_id(4)];
-    run(commands::add_tracks_to_playlist(s.handle(), s.state(), playlist.clone(), members.clone())).unwrap();
+    run(commands::add_tracks_to_playlist(s.handle(), s.state(), playlist.clone(), members.clone(), None)).unwrap();
 
     let (view, before) = s.open(collection_spec());
     let all = s.rows(view);
@@ -686,7 +689,7 @@ fn an_edit_closes_the_views_that_were_open_over_the_old_library() {
     let (view, _) = s.open(playlist_spec(&playlist_id(0)));
     assert_eq!(s.rows(view).len(), 5);
 
-    run(commands::add_tracks_to_playlist(s.handle(), s.state(), playlist_id(0), vec![track_id(30)])).unwrap();
+    run(commands::add_tracks_to_playlist(s.handle(), s.state(), playlist_id(0), vec![track_id(30)], None)).unwrap();
 
     // The page the frontend held is gone; it reopens against the new tree.
     let err = run(commands::fetch_rows(s.state(), view, 0, 10, None)).unwrap_err();
@@ -1222,7 +1225,7 @@ fn an_imported_file_goes_into_a_playlist_and_plays_on_a_deck() {
     assert_eq!(rows[0].duration_sec, 2);
 
     // Into a playlist, and loaded from there.
-    run(commands::add_tracks_to_playlist(s.handle(), s.state(), playlist_id(1), vec![id.clone()])).unwrap();
+    run(commands::add_tracks_to_playlist(s.handle(), s.state(), playlist_id(1), vec![id.clone()], None)).unwrap();
     assert_eq!(s.playlist_rows(&playlist_id(1)).len(), 6);
 
     // Nothing has opened the audio output yet: a window nobody played in
@@ -1516,6 +1519,7 @@ fn usb_export_preflight_reports_missing_source_audio() {
         s.state(),
         playlist_id(1),
         vec![imported.tracks[0].id.clone()],
+        None
     ))
     .unwrap();
     std::fs::remove_file(&audio).unwrap();
@@ -1544,7 +1548,7 @@ fn export_track_puts_a_track_on_a_stick_by_itself_and_a_sync_keeps_it_there() {
     ))
     .unwrap();
     let (first, second) = (report.tracks[0].id.clone(), report.tracks[1].id.clone());
-    run(commands::add_tracks_to_playlist(s.handle(), s.state(), playlist_id(1), vec![first.clone()])).unwrap();
+    run(commands::add_tracks_to_playlist(s.handle(), s.state(), playlist_id(1), vec![first.clone()], None)).unwrap();
 
     // The second track goes on a blank stick on its own: one track, no
     // playlist, and the record says it is loose.
@@ -1641,7 +1645,7 @@ fn a_stick_pulled_during_a_sync_is_reported_as_disconnected() {
     let audio = s._dir.path().join("Pulled.wav");
     write_wav(&audio, 2);
     let report = run(commands::import_files(s.handle(), s.state(), vec![audio.display().to_string()])).unwrap();
-    run(commands::add_tracks_to_playlist(s.handle(), s.state(), playlist_id(1), vec![report.tracks[0].id.clone()])).unwrap();
+    run(commands::add_tracks_to_playlist(s.handle(), s.state(), playlist_id(1), vec![report.tracks[0].id.clone()], None)).unwrap();
     let stick = tempfile::tempdir().unwrap();
     let mount = stick.path().join("USB");
     std::fs::create_dir_all(&mount).unwrap();
@@ -1670,7 +1674,7 @@ fn a_sync_writes_the_same_playlists_to_every_stick_and_each_stick_remembers_them
     write_wav(&audio, 2);
     let report = run(commands::import_files(s.handle(), s.state(), vec![audio.display().to_string()])).unwrap();
     let id = report.tracks[0].id.clone();
-    run(commands::add_tracks_to_playlist(s.handle(), s.state(), playlist_id(1), vec![id])).unwrap();
+    run(commands::add_tracks_to_playlist(s.handle(), s.state(), playlist_id(1), vec![id], None)).unwrap();
 
     let progress: Arc<Mutex<Vec<(String, String)>>> = Arc::new(Mutex::new(Vec::new()));
     let seen = Arc::clone(&progress);
@@ -1773,7 +1777,7 @@ fn exporting_a_folder_writes_the_folder_with_its_playlists_inside() {
     run(commands::create_folder(s.handle(), s.state(), "Set".into(), ROOT.into())).unwrap();
     let set = s.node("Set");
     run(commands::create_playlist(s.handle(), s.state(), "Inside".into(), set.id.clone(), None)).unwrap();
-    run(commands::add_tracks_to_playlist(s.handle(), s.state(), s.node("Inside").id, vec![song])).unwrap();
+    run(commands::add_tracks_to_playlist(s.handle(), s.state(), s.node("Inside").id, vec![song], None)).unwrap();
     run(commands::create_folder(s.handle(), s.state(), "Later".into(), set.id.clone())).unwrap();
     let rule = SmartRuleDto {
         logic: "all".to_owned(),

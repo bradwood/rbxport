@@ -413,6 +413,16 @@ fn adding_a_track_already_present_does_nothing() {
 }
 
 #[test]
+fn adding_a_track_already_present_can_add_it_again() {
+    let mut f = fixture();
+    let list = f.writer.create_playlist("Set", ROOT).unwrap();
+    f.writer.add_tracks(&list, &[track_id(0), track_id(1)]).unwrap();
+    let changed = f.writer.add_tracks_allowing(&list, &[track_id(0), track_id(2)], true).unwrap();
+    assert_eq!(changed.rows, 2, "the repeat and the new one");
+    assert_eq!(f.order(&list), vec![track_id(0), track_id(1), track_id(0), track_id(2)]);
+}
+
+#[test]
 fn setting_a_playlists_tracks_replaces_them_in_the_order_given() {
     let mut f = fixture();
     let list = f.writer.create_playlist("Set", ROOT).unwrap();

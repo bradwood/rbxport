@@ -3286,9 +3286,35 @@ pub async fn add_tracks_to_playlist<R: tauri::Runtime>(
     state: State<'_, Arc<AppState>>,
     playlist: String,
     tracks: Vec<String>,
+    allow_duplicates: Option<bool>,
 ) -> AppResult<u32> {
+    let allow = allow_duplicates.unwrap_or(false);
     edit(app, state, "add_tracks_to_playlist", Touched::Playlists, move |w| {
-        w.add_tracks(&playlist, &tracks).map(|_| ())
+        w.add_tracks_allowing(&playlist, &tracks, allow).map(|_| ())
+    })
+    .await
+}
+
+/// Which of `tracks` the playlist already holds, for the question asked
+/// before they are added again.
+#[tauri::command]
+pub async fn playlist_duplicates(
+    state: State<'_, Arc<AppState>>,
+    playlist: String,
+    tracks: Vec<String>,
+) -> AppResult<Vec<String>> {
+    let library = state.library()?;
+    blocking("playlist_duplicates", move || {
+        let playlists = library.playlists();
+        let Some(index) = playlist.parse::<u64>().ok().and_then(|id| playlists.index_of(id)) else {
+            return Err(AppError::new(ErrorKind::NotFound, "That playlist is not in the library."));
+        };
+        let held: std::collections::HashSet<_> = playlists.members.get(index).into_iter().flatten().copied().collect();
+        drop(playlists);
+        Ok(tracks
+            .into_iter()
+            .filter(|track| library.row_of(track).is_some_and(|row| held.contains(&row)))
+            .collect())
     })
     .await
 }

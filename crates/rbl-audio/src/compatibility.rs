@@ -268,14 +268,13 @@ pub fn convert(source: &Path, destination: &Path, target: Format) -> Result<u64>
     let rate = params
         .sample_rate
         .ok_or_else(|| error("unknown sample rate"))?;
-    let channels = params
+    // Some containers (AAC in MP4) do not declare the layout up front; it is
+    // then taken from the first decoded packet.
+    let mut channels = params
         .channels
-        .ok_or_else(|| error("unknown channel layout"))?
-        .count();
-    if rate == 0 || !matches!(channels, 1 | 2) {
-        return Err(error(
-            "compatibility conversion requires mono or stereo audio",
-        ));
+        .map(symphonia::core::audio::Channels::count);
+    if rate == 0 {
+        return Err(error("unknown sample rate"));
     }
     let mut decoder = symphonia::default::get_codecs()
         .make(params, &DecoderOptions::default())
@@ -303,7 +302,14 @@ pub fn convert(source: &Path, destination: &Path, target: Format) -> Result<u64>
             continue;
         }
         let audio = decoder.decode(&packet).map_err(error)?;
-        if audio.spec().rate != rate || audio.spec().channels.count() != channels {
+        let frame_channels = audio.spec().channels.count();
+        let channels = *channels.get_or_insert(frame_channels);
+        if !matches!(channels, 1 | 2) {
+            return Err(error(
+                "compatibility conversion requires mono or stereo audio",
+            ));
+        }
+        if audio.spec().rate != rate || frame_channels != channels {
             return Err(error("audio format changed mid-track"));
         }
         let mut samples = SampleBuffer::<f32>::new(audio.capacity() as u64, *audio.spec());

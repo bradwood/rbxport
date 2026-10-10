@@ -114,9 +114,12 @@ test("a track dropped on a new playlist is in it, and its menu takes it out agai
   const title = (await source.locator('[data-col="title"]').innerText()).trim();
   await source.dragTo(made);
   await expect(page.getByRole("contentinfo")).toContainText("Added 1 track to New playlist.");
-  // Dropping it again changes nothing: a playlist holds a track once.
+  // Dropping it again asks what to do with the duplicate; skipping it
+  // changes nothing.
   await source.dragTo(made);
-  await expect(page.getByRole("contentinfo")).toContainText("Added 1 track to New playlist.");
+  await page.getByRole("alertdialog", { name: "Duplicate tracks" })
+    .getByRole("button", { name: "Skip duplicates" }).click();
+  await expect(page.getByRole("alertdialog")).toHaveCount(0);
 
   await made.click();
   await expect(page.getByTestId("browser-title")).toHaveText("New playlist (1 Tracks)");

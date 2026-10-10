@@ -602,6 +602,8 @@ pub fn run() {
             commands::undo_edit,
             commands::redo_edit,
             commands::add_tracks_to_playlist,
+            commands::list_import_files,
+            commands::import_files_slice,
             commands::reload_tags,
             commands::add_to_tag_list,
             commands::remove_from_tag_list,

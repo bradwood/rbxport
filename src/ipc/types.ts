@@ -408,6 +408,13 @@ export interface Backend {
   importFolder(): Promise<ImportReport | null>;
   /** Adds these files to the library: the Explorer's Import To Collection. */
   importPaths(paths: string[]): Promise<ImportReport>;
+  /** The audio files an import of these paths would take, folders walked, none imported. */
+  listImportFiles(paths: string[]): Promise<string[]>;
+  /**
+   * One slice of a larger import. The library is not re-read afterwards, so
+   * the caller calls {@link reloadLibrary} once after the last slice.
+   */
+  importPathsSlice(paths: string[]): Promise<ImportReport>;
   /**
    * A folder from Finder or Explorer dropped onto the Playlists root or a
    * playlist folder: one playlist under `parent` named after the folder,

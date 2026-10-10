@@ -2671,6 +2671,9 @@ export function createMockBackend(options: MockOptions = {}): Backend {
     importFiles: () => wait(null),
     importFolder: () => wait(null),
     importPaths: (paths) => wait({ imported: 0, skipped: paths.map((p) => `${p}: the mock library takes no files`), tracks: [], existing: [] }),
+    // No file system in a browser: a path is its own one file.
+    listImportFiles: (paths) => wait([...paths]),
+    importPathsSlice: (paths) => wait({ imported: 0, skipped: paths.map((p) => `${p}: the mock library takes no files`), tracks: [], existing: [] }),
     // Emits progress, then holds until `window.__finishImport()` so a test
     // can watch the status line while an import is still running. A test
     // sets `window.__xmlSameNamed` to the lists the file would replace: the

@@ -2856,6 +2856,20 @@ fn expand_import_paths(paths: &[String]) -> Vec<std::path::PathBuf> {
     files
 }
 
+/// The files an import of `paths` would take, found without importing any:
+/// the walk `import_files` does, so a caller can import them in slices and
+/// show how far along it is.
+#[tauri::command]
+pub async fn list_import_files(paths: Vec<String>) -> AppResult<Vec<String>> {
+    blocking("list_import_files", move || {
+        Ok(expand_import_paths(&paths)
+            .into_iter()
+            .map(|path| path.to_string_lossy().into_owned())
+            .collect())
+    })
+    .await
+}
+
 /// Adds files to the library.
 ///
 /// A chosen path may be a single file or a folder: a folder is walked
@@ -2868,6 +2882,27 @@ pub async fn import_files<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     state: State<'_, Arc<AppState>>,
     paths: Vec<String>,
+) -> AppResult<ImportReportDto> {
+    import_files_then(app, state, paths, true).await
+}
+
+/// One slice of a larger import: the same as [`import_files`] but the library
+/// is not re-read afterwards, because a reload re-reads all of it. The caller
+/// sends `reload_library` once, after the last slice.
+#[tauri::command]
+pub async fn import_files_slice<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
+    state: State<'_, Arc<AppState>>,
+    paths: Vec<String>,
+) -> AppResult<ImportReportDto> {
+    import_files_then(app, state, paths, false).await
+}
+
+async fn import_files_then<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
+    state: State<'_, Arc<AppState>>,
+    paths: Vec<String>,
+    reload_after: bool,
 ) -> AppResult<ImportReportDto> {
     let state_for_edit = Arc::clone(&state);
     let writing = Arc::clone(&state);
@@ -2917,7 +2952,7 @@ pub async fn import_files<R: tauri::Runtime>(
 
     // Only reload if anything landed; a batch that imported nothing has not
     // changed the library.
-    if report.imported > 0 {
+    if report.imported > 0 && reload_after {
         reload(app, state_for_edit).await?;
     }
     Ok(report)

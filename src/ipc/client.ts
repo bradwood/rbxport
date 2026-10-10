@@ -208,6 +208,8 @@ async function realBackend(): Promise<Backend> {
       return invoke<ImportReport>("import_files", { paths: picked });
     },
     importPaths: (paths) => invoke<ImportReport>("import_files", { paths }),
+    listImportFiles: (paths) => invoke<string[]>("list_import_files", { paths }),
+    importPathsSlice: (paths) => invoke<ImportReport>("import_files_slice", { paths }),
     importFolderPlaylist: (path, parent, replace, at) =>
       invoke<FolderPlaylistReport>("import_folder_playlist", { path, parent, replace: replace ?? null, at: at ?? null }),
     exportLoopWav: async (track, title, inMs, outMs) => {

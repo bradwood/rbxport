@@ -1698,7 +1698,13 @@ export interface Edits {
   deletePlaylist(id: string): Promise<EditHistoryState>;
   undoEdit(): Promise<EditHistoryState>;
   redoEdit(): Promise<EditHistoryState>;
-  addTracksToPlaylist(playlist: string, tracks: string[]): Promise<number>;
+  /**
+   * Adds tracks to the end of a playlist. A track the playlist already holds
+   * is left out unless `allowDuplicates` is true, which adds it again.
+   */
+  addTracksToPlaylist(playlist: string, tracks: string[], allowDuplicates?: boolean): Promise<number>;
+  /** The ones of `tracks` the playlist already holds. */
+  playlistDuplicates(playlist: string, tracks: string[]): Promise<string[]>;
   /** Reload Tag: the files' tags read again over the rows. */
   reloadTags(tracks: string[]): Promise<number>;
   /** The Tag List: tracks go on the end, come off, or it is emptied. */

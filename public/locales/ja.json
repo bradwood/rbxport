@@ -1593,5 +1593,22 @@
   "The two existing device libraries disagree. Reconcile them in rekordbox before their first sync here.": "2 つの既存のデバイス ライブラリは一致しません。ここで最初に同期する前に、rekordbox でそれらを調整してください。",
   "This USB belongs to a different or older unverified master library. Import its contents in rekordbox before changing its ownership.": "この USB は、別の、または古い未検証のマスター ライブラリに属しています。所有権を変更する前に、コンテンツを rekordbox にインポートしてください。",
   "OneLibrary contains cue records that this export would replace. Import the cues in rekordbox first.": "OneLibrary には、このエクスポートによって置き換えられるキュー レコードが含まれています。まずrekordboxにキューをインポートします。",
-  "A track being removed is still referenced by USB history. Import and clear that history in rekordbox first.": "削除されたトラックは、USB 履歴によって引き続き参照されます。まずその履歴を rekordbox にインポートしてクリアします。"
+  "A track being removed is still referenced by USB history. Import and clear that history in rekordbox first.": "削除されたトラックは、USB 履歴によって引き続き参照されます。まずその履歴を rekordbox にインポートしてクリアします。",
+  "Add duplicates": "Add duplicates",
+  "Duplicate tracks": "Duplicate tracks",
+  "Please wait (loading database)…": "Please wait (loading database)…",
+  "Remember my choice": "Remember my choice",
+  "Skip duplicates": "Skip duplicates",
+  "Some tracks were left out": "Some tracks were left out",
+  "The sync finished, but these tracks could not be written and were left out:": "The sync finished, but these tracks could not be written and were left out:",
+  "When a track is already in the playlist": "When a track is already in the playlist",
+  "{count} of the selected tracks are already in {name}.": "{count} of the selected tracks are already in {name}.",
+  "{count} of the {total} selected tracks are already in {name}.": "{count} of the {total} selected tracks are already in {name}.",
+  "…and {count} more. See the log for the full list.": "…and {count} more. See the log for the full list.",
+  "Add the duplicates": "Add the duplicates",
+  "Ask every time": "Ask every time",
+  "Skip the duplicates": "Skip the duplicates",
+  "add": "add",
+  "ask": "ask",
+  "skip": "skip"
 }

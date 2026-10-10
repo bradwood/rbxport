@@ -87,6 +87,19 @@ export function AdvancedPane({ tab, summary }: {
             onChange={(doubleClickToEdit) => set({ doubleClickToEdit })}
           />
         </Section>
+        <Section title="Playlists">
+          <Sub>When a track is already in the playlist</Sub>
+          <Radios
+            label="When a track is already in the playlist"
+            value={advanced.duplicateTracks}
+            choices={[
+              { value: "ask", label: "Ask every time" },
+              { value: "skip", label: "Skip the duplicates" },
+              { value: "add", label: "Add the duplicates" },
+            ]}
+            onChange={(duplicateTracks) => set({ duplicateTracks })}
+          />
+        </Section>
         {unlockWarning ? <div className={styles.warningBackdrop} role="presentation">
           <section
             ref={warningDialog}

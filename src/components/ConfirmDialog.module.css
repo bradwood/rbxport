@@ -33,3 +33,4 @@
 }
 .button:hover:not(:disabled) { border-color: var(--c-accent); }
 .primary { border-color: var(--c-accent); }
+.remember { display: flex; align-items: center; gap: 8px; margin: -6px 0 18px; }

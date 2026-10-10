@@ -1585,5 +1585,22 @@
   "The two existing device libraries disagree. Reconcile them in rekordbox before their first sync here.": "Mevcut iki cihaz kütüphanesi aynı fikirde değil. Buradaki ilk senkronizasyondan önce bunları rekordbox'ta uzlaştırın.",
   "This USB belongs to a different or older unverified master library. Import its contents in rekordbox before changing its ownership.": "Bu USB, farklı veya daha eski, doğrulanmamış bir ana kitaplığa ait. Sahipliğini değiştirmeden önce içeriğini rekordbox'a aktarın.",
   "OneLibrary contains cue records that this export would replace. Import the cues in rekordbox first.": "OneLibrary, bu dışa aktarımın yerini alacağı işaret kayıtlarını içerir. Önce ipuçlarını rekordbox'a aktarın.",
-  "A track being removed is still referenced by USB history. Import and clear that history in rekordbox first.": "Kaldırılan bir parçaya USB geçmişi tarafından hâlâ başvurulmaktadır. Öncelikle bu geçmişi rekordbox'a aktarın ve temizleyin."
+  "A track being removed is still referenced by USB history. Import and clear that history in rekordbox first.": "Kaldırılan bir parçaya USB geçmişi tarafından hâlâ başvurulmaktadır. Öncelikle bu geçmişi rekordbox'a aktarın ve temizleyin.",
+  "Add duplicates": "Add duplicates",
+  "Duplicate tracks": "Duplicate tracks",
+  "Please wait (loading database)…": "Please wait (loading database)…",
+  "Remember my choice": "Remember my choice",
+  "Skip duplicates": "Skip duplicates",
+  "Some tracks were left out": "Some tracks were left out",
+  "The sync finished, but these tracks could not be written and were left out:": "The sync finished, but these tracks could not be written and were left out:",
+  "When a track is already in the playlist": "When a track is already in the playlist",
+  "{count} of the selected tracks are already in {name}.": "{count} of the selected tracks are already in {name}.",
+  "{count} of the {total} selected tracks are already in {name}.": "{count} of the {total} selected tracks are already in {name}.",
+  "…and {count} more. See the log for the full list.": "…and {count} more. See the log for the full list.",
+  "Add the duplicates": "Add the duplicates",
+  "Ask every time": "Ask every time",
+  "Skip the duplicates": "Skip the duplicates",
+  "add": "add",
+  "ask": "ask",
+  "skip": "skip"
 }

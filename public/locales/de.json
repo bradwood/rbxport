@@ -1581,5 +1581,22 @@
   "The two existing device libraries disagree. Reconcile them in rekordbox before their first sync here.": "Die beiden vorhandenen Gerätebibliotheken sind anderer Meinung. Hier können Sie sie vor der ersten Synchronisierung in rekordbox abgleichen.",
   "This USB belongs to a different or older unverified master library. Import its contents in rekordbox before changing its ownership.": "Dieser USB-Stick gehört zu einer anderen oder älteren, nicht verifizierten Master-Bibliothek. Importieren Sie den Inhalt in rekordbox, bevor Sie den Besitzer ändern.",
   "OneLibrary contains cue records that this export would replace. Import the cues in rekordbox first.": "OneLibrary enthält Cue-Datensätze, die dieser Export ersetzen würde. Importieren Sie zuerst die Cues in rekordbox.",
-  "A track being removed is still referenced by USB history. Import and clear that history in rekordbox first.": "Auf einen Titel, der entfernt wird, wird weiterhin im USB-Verlauf verwiesen. Importieren und löschen Sie diesen Verlauf zunächst in rekordbox."
+  "A track being removed is still referenced by USB history. Import and clear that history in rekordbox first.": "Auf einen Titel, der entfernt wird, wird weiterhin im USB-Verlauf verwiesen. Importieren und löschen Sie diesen Verlauf zunächst in rekordbox.",
+  "Add duplicates": "Add duplicates",
+  "Duplicate tracks": "Duplicate tracks",
+  "Please wait (loading database)…": "Please wait (loading database)…",
+  "Remember my choice": "Remember my choice",
+  "Skip duplicates": "Skip duplicates",
+  "Some tracks were left out": "Some tracks were left out",
+  "The sync finished, but these tracks could not be written and were left out:": "The sync finished, but these tracks could not be written and were left out:",
+  "When a track is already in the playlist": "When a track is already in the playlist",
+  "{count} of the selected tracks are already in {name}.": "{count} of the selected tracks are already in {name}.",
+  "{count} of the {total} selected tracks are already in {name}.": "{count} of the {total} selected tracks are already in {name}.",
+  "…and {count} more. See the log for the full list.": "…and {count} more. See the log for the full list.",
+  "Add the duplicates": "Add the duplicates",
+  "Ask every time": "Ask every time",
+  "Skip the duplicates": "Skip the duplicates",
+  "add": "add",
+  "ask": "ask",
+  "skip": "skip"
 }

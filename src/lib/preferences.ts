@@ -207,6 +207,10 @@ export interface DjSystemPreferences {
 export const UPDATE_FREQUENCIES = ["start", "daily", "weekly"] as const;
 export type UpdateFrequency = (typeof UPDATE_FREQUENCIES)[number];
 
+/** What adding a track a playlist already holds does: ask, leave it out, or add it again. */
+export const DUPLICATE_TRACKS = ["ask", "skip", "add"] as const;
+export type DuplicateTracks = (typeof DUPLICATE_TRACKS)[number];
+
 export interface AdvancedPreferences {
   /** Auto Relocate Search Folders › Specified user folders: the list. */
   relocateFolders: string[];
@@ -224,6 +228,8 @@ export interface AdvancedPreferences {
   protectLibrary: boolean;
   /** Edit Library › Double-click to edit; off is a click on a selected row. */
   doubleClickToEdit: boolean;
+  /** Adding tracks a playlist already holds: asked each time, or always skipped or added again. */
+  duplicateTracks: DuplicateTracks;
   syncType: SyncType;
   /** Allow BEAT/BPM SYNC with double/half BPM. */
   syncDoubleHalf: boolean;
@@ -327,6 +333,7 @@ export const DEFAULT_PREFERENCES: Preferences = {
     relocateUserFolders: false,
     protectLibrary: true,
     doubleClickToEdit: false,
+    duplicateTracks: "ask",
     syncType: "beat",
     syncDoubleHalf: true,
     quantizeBeat: "1/1",
@@ -507,6 +514,7 @@ export function sanitisePreferences(value: unknown): Preferences {
       // that user's writable library; only a truly empty store gets defaults.
       protectLibrary: bool(advanced.protectLibrary, hasStoredSection ? false : d.advanced.protectLibrary),
       doubleClickToEdit: bool(advanced.doubleClickToEdit, d.advanced.doubleClickToEdit),
+      duplicateTracks: oneOf(advanced.duplicateTracks, DUPLICATE_TRACKS, d.advanced.duplicateTracks),
       syncType: oneOf(advanced.syncType, SYNC_TYPES, d.advanced.syncType),
       syncDoubleHalf: bool(advanced.syncDoubleHalf, d.advanced.syncDoubleHalf),
       quantizeBeat: oneOf(advanced.quantizeBeat, QUANTIZE_BEATS, d.advanced.quantizeBeat),

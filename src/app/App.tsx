@@ -1,4 +1,5 @@
 import { ConfirmHost } from "@/components/ConfirmDialog";
+import { DuplicateTracksDialog, type DuplicateAnswer } from "@/components/DuplicateTracksDialog";
 import { JobQueue, slices, type JobView } from "@/lib/jobQueue";
 import { useBackupProgress } from "@/store/useBackupProgress";
 import { useExportProgress } from "@/store/useExportProgress";
@@ -999,6 +1000,28 @@ function AppBody() {
     [runEdit, showPending, refuseLoose],
   );
 
+  // Tracks a playlist already holds: left out, added again, or asked about
+  // per Preferences. Null when the question was cancelled, which stops the add.
+  const [duplicatePrompt, setDuplicatePrompt] = useState<{
+    playlist: string; duplicates: number; total: number; settle: (answer: DuplicateAnswer | null) => void;
+  } | null>(null);
+  const resolveDuplicates = useCallback(
+    async (playlistId: string, trackIds: string[], name: string): Promise<boolean | null> => {
+      const backend = await getBackend();
+      const held = await backend.edits.playlistDuplicates(playlistId, trackIds);
+      if (held.length === 0) return false;
+      const policy = advancedPrefs.duplicateTracks;
+      if (policy !== "ask") return policy === "add";
+      const answer = await new Promise<DuplicateAnswer | null>((settle) =>
+        setDuplicatePrompt({ playlist: name, duplicates: held.length, total: trackIds.length, settle }));
+      setDuplicatePrompt(null);
+      if (!answer) return null;
+      if (answer.remember) prefs.update("advanced", { duplicateTracks: answer.choice });
+      return answer.choice === "add";
+    },
+    [advancedPrefs.duplicateTracks, prefs],
+  );
+
   const addDraggedTo = useCallback(
     (playlistId: string) => {
       const ids = draggedTracks?.ids;
@@ -1026,11 +1049,16 @@ function AppBody() {
             refuse(`Nothing added to ${name}${tail}.`);
             return;
           }
+          const allowDuplicates = await resolveDuplicates(playlistId, trackIds, name);
+          if (allowDuplicates === null) {
+            report(`Nothing added to ${name}${tail}.`);
+            return;
+          }
           update({ total: trackIds.length, pendingRows: trackIds.length });
           let added = 0;
           for (const slice of slices(trackIds, ADD_SLICE)) {
             if (signal.aborted) break;
-            await backend.edits.addTracksToPlaylist(playlistId, slice);
+            await backend.edits.addTracksToPlaylist(playlistId, slice, allowDuplicates);
             added += slice.length;
             update({ done: added, pendingRows: trackIds.length - added });
           }
@@ -1041,7 +1069,7 @@ function AppBody() {
         },
       });
     },
-    [draggedTracks, tree, report, refuse, advancedPrefs.protectLibrary, analysisPrefs.auto, analysis, jobs, t],
+    [draggedTracks, tree, report, refuse, advancedPrefs.protectLibrary, analysisPrefs.auto, analysis, jobs, t, resolveDuplicates],
   );
 
   /**
@@ -1101,10 +1129,11 @@ function AppBody() {
           // One re-read of the library for the whole import, not one a slice.
           if (imported > 0) await backend.reloadLibrary();
           update({ label: t("Adding {count} to {name}", { count: total, name }) });
+          const allowDuplicates = signal.aborted ? false : await resolveDuplicates(playlistId, toAdd, name);
           let added = 0;
           for (const slice of slices(toAdd, ADD_SLICE)) {
-            if (signal.aborted) break;
-            await backend.edits.addTracksToPlaylist(playlistId, slice);
+            if (signal.aborted || allowDuplicates === null) break;
+            await backend.edits.addTracksToPlaylist(playlistId, slice, allowDuplicates);
             added += slice.length;
             update({ done: total + added, pendingRows: toAdd.length - added });
           }
@@ -1118,7 +1147,7 @@ function AppBody() {
         },
       });
     },
-    [tree, report, refuse, advancedPrefs.protectLibrary, analysisPrefs.auto, analysis, jobs, t],
+    [tree, report, refuse, advancedPrefs.protectLibrary, analysisPrefs.auto, analysis, jobs, t, resolveDuplicates],
   );
 
   const importDroppedFilesTo = useCallback(
@@ -1698,13 +1727,17 @@ function AppBody() {
         const skipped = imported?.skipped.length ?? 0;
         const tail = skipped > 0 ? `; ${skipped} skipped` : "";
         if (trackIds.length === 0) return `Nothing added to ${name}${tail}.`;
-        const added = await backend.edits.addTracksToPlaylist(playlist, trackIds);
-        return added === 0
+        const allowDuplicates = await resolveDuplicates(playlist, trackIds, name);
+        if (allowDuplicates === null) return `Nothing added to ${name}${tail}.`;
+        const held = allowDuplicates ? [] : await backend.edits.playlistDuplicates(playlist, trackIds);
+        await backend.edits.addTracksToPlaylist(playlist, trackIds, allowDuplicates);
+        const count = trackIds.length - held.length;
+        return count === 0
           ? `Already in ${name}${tail}.`
-          : `Added ${trackIds.length} track${trackIds.length === 1 ? "" : "s"} to ${name}${tail}.`;
+          : `Added ${count} track${count === 1 ? "" : "s"} to ${name}${tail}.`;
       });
     },
-    [write, tree, analysisPrefs.auto, analysis],
+    [write, tree, analysisPrefs.auto, analysis, resolveDuplicates],
   );
 
   const addToTagList = useCallback(
@@ -2933,6 +2966,10 @@ function AppBody() {
           onRestart={updater.restart}
           onClose={updater.dismiss}
         />
+      ) : null}
+      {duplicatePrompt ? (
+        <DuplicateTracksDialog playlist={duplicatePrompt.playlist} duplicates={duplicatePrompt.duplicates}
+          total={duplicatePrompt.total} onAnswer={duplicatePrompt.settle} />
       ) : null}
       {missingLibrary !== null ? (
         <NewLibraryDialog key={missingLibrary.kind} problem={missingLibrary}

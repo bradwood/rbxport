@@ -557,8 +557,10 @@ async function realBackend(): Promise<Backend> {
       deletePlaylist: (id) => invoke<EditHistoryState>("delete_playlist", { id }),
       undoEdit: () => invoke<EditHistoryState>("undo_edit"),
       redoEdit: () => invoke<EditHistoryState>("redo_edit"),
-      addTracksToPlaylist: (playlist, tracks) =>
-        invoke<number>("add_tracks_to_playlist", { playlist, tracks }),
+      addTracksToPlaylist: (playlist, tracks, allowDuplicates) =>
+        invoke<number>("add_tracks_to_playlist", { playlist, tracks, allowDuplicates }),
+      playlistDuplicates: (playlist, tracks) =>
+        invoke<string[]>("playlist_duplicates", { playlist, tracks }),
       reloadTags: (tracks) => invoke<number>("reload_tags", { tracks }),
       addToTagList: (tracks) => invoke<number>("add_to_tag_list", { tracks }),
       removeFromTagList: (tracks) => invoke<number>("remove_from_tag_list", { tracks }),

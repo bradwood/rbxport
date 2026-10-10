@@ -1011,13 +1011,17 @@ export function createMockBackend(options: MockOptions = {}): Backend {
       await bump(false);
       return announceHistory();
     },
-    addTracksToPlaylist: (playlist, tracks) => {
+    addTracksToPlaylist: (playlist, tracks, allowDuplicates = false) => {
       // The real backend refuses while Rekordbox holds the database; the mock
       // never does, so the happy path is what `pnpm dev:mock` exercises.
       const current = membersOf(playlist);
-      for (const track of tracks) if (!current.includes(track)) current.push(track);
+      for (const track of tracks) if (allowDuplicates || !current.includes(track)) current.push(track);
       membership.set(playlist, current);
       return bump();
+    },
+    playlistDuplicates: (playlist, tracks) => {
+      const current = new Set(membersOf(playlist));
+      return Promise.resolve(tracks.filter((track) => current.has(track)));
     },
     // The mock's rows have no files to read tags from.
     reloadTags: () => bump(),

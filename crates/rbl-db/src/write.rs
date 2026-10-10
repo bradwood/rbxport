@@ -954,21 +954,19 @@ impl Writer {
             self.move_to(&playlist, parent, Some(at))?;
         }
         let mut members = Vec::with_capacity(files.len());
-        for file in files {
-            if let Some(id) = self.track_id_at(file)? {
-                outcome.existing.push(id.clone());
-                members.push(id);
-                continue;
-            }
-            match self.import_file(file) {
-                Ok(id) => {
+        for (file, imported) in files.iter().zip(self.import_files(files)?) {
+            match imported {
+                ImportOutcome::Existing(id) => {
+                    outcome.existing.push(id.clone());
+                    members.push(id);
+                }
+                ImportOutcome::Added(id) => {
                     outcome.imported.push((id.clone(), file.clone()));
                     members.push(id);
                 }
-                Err(DbError::WriteRefused(reason)) => {
+                ImportOutcome::Refused(reason) => {
                     outcome.skipped.push(format!("{}: {reason}", file.display()));
                 }
-                Err(other) => return Err(other),
             }
         }
         if !members.is_empty() {
@@ -1382,60 +1380,131 @@ impl Writer {
         let key = tag_key_id(&tx, &tags.key, &mut self.rng, &stamp)?;
 
         let usn = next_usn(&tx)?;
-        // Every column rekordbox 7 fills on a file it imports itself, as on
-        // the 645 rows it made on this machine [OBS] — the empty strings are
-        // empty strings there, not NULLs. Left unset because their values are
-        // [UNKNOWN]: `rb_file_id` (a counter of unknown ownership),
-        // `ContentLink` (one constant on 643 of 645 rows), and the three
-        // `*Updated` counters, which rekordbox sets as it goes.
-        tx.execute(
-            "INSERT INTO djmdContent
-                (ID, FolderPath, FileNameL, FileNameS, Title, Subtitle, ArtistID, AlbumID, GenreID, LabelID, KeyID,
-                 Length, BitRate, BitDepth, SampleRate, FileSize, FileType, ReleaseYear, TrackNo, DiscNo,
-                 Commnt, Rating, ColorID, DJPlayCount, Analysed, UUID,
-                 StockDate, DateCreated, MasterDBID, MasterSongID, DeviceID, HotCueAutoLoad,
-                 OrgFolderPath, ModifiedByRBM, DeliveryControl, DeliveryComment, Lyricist, Reserved1, ExtInfo,
-                 SamplerTrackInfo, SamplerPlayOffset, SamplerGain, VideoAssociate, LyricStatus, ServiceID,
-                 rb_data_status, rb_local_data_status, rb_local_deleted, rb_local_synced,
-                 usn, rb_local_usn, created_at, updated_at)
-             VALUES (?1, ?2, ?3, '', ?4, '', ?5, ?6, ?7, ?8, ?24,
-                     ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, 0,
-                     ?17, 0, 0, 0, NULL, ?18,
-                     ?19, ?19, ?20, ?1, ?21, 'on',
-                     '', '', '', '', '', '', 'null',
-                     0, 0, 0, 0, 0, 0,
-                     0, 0, 0, 0,
-                     NULL, ?22, ?23, ?23)",
-            params![
-                id,
-                folder,
-                file_name,
-                tags.title,
-                artist,
-                album,
-                genre,
-                label,
-                i64::from(tags.duration_sec),
-                i64::from(tags.bitrate),
-                i64::from(tags.bit_depth),
-                i64::from(tags.sample_rate),
-                i64::try_from(tags.file_size).unwrap_or(0),
-                crate::import::file_type(path),
-                i64::from(tags.year),
-                i64::from(tags.track_no),
-                tags.comment,
-                uuid,
-                today,
-                master_db,
-                device,
-                usn,
-                stamp,
-                key
-            ],
+        insert_content(
+            &tx,
+            &NewContent {
+                id: &id, uuid: &uuid, folder: &folder, file_name: &file_name, path, tags: &tags,
+                artist: &artist, album: &album, genre: &genre, label: &label, key: &key,
+                today: &today, stamp: &stamp, master_db: &master_db, device: &device, usn,
+            },
         )?;
         set_counter(&tx, usn)?;
         tx.commit()?;
         Ok(id)
+    }
+
+    /// Imports many files in one transaction, one outcome per path, in order.
+    ///
+    /// Each file ends up as [`Writer::import_file`] would leave it, with the
+    /// same checks (a path the library holds is `Existing`, an unreadable or
+    /// non-audio file is `Refused`), but the work around the rows is shared:
+    /// tags are read on several threads before the write starts, the paths
+    /// the library holds are read once, each artist, album, genre, label and
+    /// key name is looked up once however many files carry it, and the USN
+    /// is counted up from one read instead of found again for every row.
+    /// One commit covers the batch. A database error, unlike a refused file,
+    /// stops the batch and nothing in it is kept.
+    pub fn import_files(&mut self, paths: &[PathBuf]) -> Result<Vec<ImportOutcome>> {
+        use std::collections::HashMap;
+
+        let paths: Vec<PathBuf> = paths.iter().map(|p| normalized(p)).collect();
+        let tags = read_tags_parallel(&paths);
+        self.prepare()?;
+        let stamp = time::now();
+        let today = stamp.get(..10).unwrap_or_default().to_owned();
+
+        let tx = self.library.connection_mut()
+            .transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let (master_db, device): (Option<String>, Option<String>) = tx
+            .query_row("SELECT DBID, DeviceID FROM djmdProperty LIMIT 1", [], |r| Ok((r.get(0)?, r.get(1)?)))
+            .unwrap_or((None, None));
+
+        // Where the library already holds each path, the lowest id first as
+        // `track_id_at` answers it. One pass over the table, kept for the
+        // paths of this batch only.
+        let wanted: std::collections::HashSet<String> =
+            paths.iter().map(|p| p.to_string_lossy().into_owned()).collect();
+        let mut held: HashMap<String, String> = HashMap::new();
+        {
+            let mut stmt = tx.prepare(
+                "SELECT FolderPath, ID FROM djmdContent WHERE rb_local_deleted = 0 ORDER BY ID",
+            )?;
+            let mut rows = stmt.query([])?;
+            while let Some(row) = rows.next()? {
+                let folder: Option<String> = row.get(0)?;
+                if let Some(folder) = folder.filter(|f| wanted.contains(f)) {
+                    held.entry(folder).or_insert(row.get::<_, String>(1)?);
+                }
+            }
+        }
+
+        let mut names: HashMap<(&'static str, String), Option<String>> = HashMap::new();
+        let mut next_usn_value: Option<i64> = None;
+        let mut last_usn: Option<i64> = None;
+        let mut outcomes = Vec::with_capacity(paths.len());
+
+        for (path, tags) in paths.iter().zip(tags) {
+            let folder = path.to_string_lossy().into_owned();
+            if let Some(id) = held.get(&folder) {
+                outcomes.push(ImportOutcome::Existing(id.clone()));
+                continue;
+            }
+            let tags = match tags {
+                Ok(tags) => tags,
+                Err(e) => {
+                    outcomes.push(ImportOutcome::Refused(e.to_string()));
+                    continue;
+                }
+            };
+
+            let mut name_id = |table: &'static str, column: &str, name: &str, rng: &mut Rng| -> Result<Option<String>> {
+                if let Some(id) = names.get(&(table, name.to_owned())) {
+                    return Ok(id.clone());
+                }
+                let id = if table == "djmdKey" {
+                    tag_key_id(&tx, name, rng, &stamp)?
+                } else {
+                    intern(&tx, table, column, name, rng, &stamp)?
+                };
+                names.insert((table, name.to_owned()), id.clone());
+                Ok(id)
+            };
+            let artist = name_id("djmdArtist", "Name", &tags.artist, &mut self.rng)?;
+            let album = name_id("djmdAlbum", "Name", &tags.album, &mut self.rng)?;
+            let genre = name_id("djmdGenre", "Name", &tags.genre, &mut self.rng)?;
+            let label = name_id("djmdLabel", "Name", &tags.label, &mut self.rng)?;
+            let key = name_id("djmdKey", "ScaleName", &tags.key, &mut self.rng)?;
+
+            let id = unused_id_in(&tx, &mut self.rng, "djmdContent", MAX_CONTENT_ID)?;
+            let uuid = self.rng.uuid4();
+            // Making a lookup row above moves the registry's counter, so the
+            // next USN is whichever is larger: what this batch has counted to,
+            // or what the registry now says.
+            let usn = match next_usn_value {
+                None => next_usn(&tx)?,
+                Some(counted) => counted.max(registry_counter(&tx)?.saturating_add(1)),
+            };
+            let file_name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+            insert_content(
+                &tx,
+                &NewContent {
+                    id: &id, uuid: &uuid, folder: &folder, file_name: &file_name, path, tags: &tags,
+                    artist: &artist, album: &album, genre: &genre, label: &label, key: &key,
+                    today: &today, stamp: &stamp, master_db: &master_db, device: &device, usn,
+                },
+            )?;
+            next_usn_value = Some(usn.checked_add(1).ok_or_else(|| {
+                DbError::WriteRefused("local update counter overflow".into())
+            })?);
+            last_usn = Some(usn);
+            held.insert(folder, id.clone());
+            outcomes.push(ImportOutcome::Added(id));
+        }
+        if let Some(usn) = last_usn {
+            set_counter(&tx, usn)?;
+        }
+        tx.commit()?;
+        Ok(outcomes)
     }
 
     // -------------------------------------------------------------- analysis
@@ -1519,18 +1588,7 @@ impl Writer {
 
     /// Finds an unused id below a ceiling, for tables whose ids are smaller.
     fn unused_id_below(&mut self, table: &str, limit: u64) -> Result<String> {
-        let sql = format!("SELECT COUNT(*) FROM {table} WHERE ID = ?1");
-        for _ in 0..ID_ATTEMPTS {
-            let candidate = self.rng.numeric_id(limit);
-            let taken: i64 =
-                self.library.connection().query_row(&sql, params![candidate], |r| r.get(0))?;
-            if taken == 0 {
-                return Ok(candidate);
-            }
-        }
-        Err(DbError::WriteRefused(format!(
-            "could not find an unused id for {table} in {ID_ATTEMPTS} attempts"
-        )))
+        unused_id_in(self.library.connection(), &mut self.rng, table, limit)
     }
 
     // ------------------------------------------------------------------ cues
@@ -2681,6 +2739,74 @@ impl Writer {
         Ok(Changed { rows, usn })
     }
 
+    /// Soft-deletes many tracks and every membership pointing at them, in one
+    /// transaction: the same rows [`Writer::delete_track`] leaves for each,
+    /// without its per-track scans. The memberships are found together, each
+    /// affected playlist closes its gaps once, and the USN is counted up from
+    /// one read. A track that is not live is skipped, as it is there.
+    pub fn delete_tracks(&mut self, contents: &[String]) -> Result<Changed> {
+        use std::collections::BTreeSet;
+
+        self.prepare()?;
+        let stamp = time::now();
+        let tx = self.library.connection_mut()
+            .transaction_with_behavior(TransactionBehavior::Immediate)?;
+
+        let mut memberships: Vec<String> = Vec::new();
+        let mut playlists: BTreeSet<String> = BTreeSet::new();
+        for chunk in contents.chunks(500) {
+            let marks = vec!["?"; chunk.len()].join(",");
+            let mut stmt = tx.prepare(&format!(
+                "SELECT ID, PlaylistID FROM djmdSongPlaylist
+                 WHERE rb_local_deleted = 0 AND ContentID IN ({marks})"
+            ))?;
+            let found = stmt
+                .query_map(rusqlite::params_from_iter(chunk), |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)))?
+                .collect::<rusqlite::Result<Vec<_>>>()?;
+            for (id, playlist) in found {
+                memberships.push(id);
+                playlists.insert(playlist);
+            }
+        }
+
+        let start = next_usn(&tx)?;
+        let mut next = start;
+        let mut rows = 0;
+        let take = |next: &mut i64| -> Result<i64> {
+            let used = *next;
+            *next = used.checked_add(1).ok_or_else(|| DbError::WriteRefused("local update counter overflow".into()))?;
+            Ok(used)
+        };
+        for id in &memberships {
+            let usn = take(&mut next)?;
+            rows += tx.execute(
+                "UPDATE djmdSongPlaylist SET rb_local_deleted = 1, rb_local_usn = ?1, updated_at = ?2
+                 WHERE ID = ?3 AND rb_local_deleted = 0",
+                params![usn, stamp, id],
+            )?;
+        }
+        // Each affected playlist closes its gaps, or TrackNo stops being
+        // contiguous and rekordbox renders the playlist with holes.
+        for playlist in &playlists {
+            renumber_from(&tx, playlist, &stamp, &mut next)?;
+        }
+        for content in contents {
+            let usn = take(&mut next)?;
+            rows += tx.execute(
+                "UPDATE djmdContent SET rb_local_deleted = 1, rb_local_usn = ?1, updated_at = ?2
+                 WHERE ID = ?3 AND rb_local_deleted = 0",
+                params![usn, stamp, content],
+            )?;
+        }
+        // The last USN handed out, or the first free one when nothing was.
+        let usn = if next > start { next - 1 } else { start };
+        if next > start {
+            set_counter(&tx, usn)?;
+        }
+        tx.commit()?;
+        Ok(Changed { rows, usn })
+    }
+
     // --------------------------------------------------------------- plumbing
 
     /// One-column update on a playlist, with the bookkeeping attached.
@@ -2885,6 +3011,161 @@ impl Writer {
             "could not find an unused id for {table} in {ID_ATTEMPTS} attempts"
         )))
     }
+}
+
+/// Reads the tags of every path, on as many threads as the machine has cores
+/// (up to eight). Reading a file's tags is disk and decode work that touches
+/// no database, so it is the one part of an import that can overlap.
+fn read_tags_parallel(
+    paths: &[PathBuf],
+) -> Vec<std::result::Result<crate::import::TrackTags, crate::import::ImportError>> {
+    let threads = std::thread::available_parallelism().map_or(1, usize::from).min(8);
+    if threads <= 1 || paths.len() < 2 {
+        return paths.iter().map(|p| crate::import::read_tags(p)).collect();
+    }
+    let size = paths.len().div_ceil(threads);
+    std::thread::scope(|scope| {
+        let workers: Vec<_> = paths
+            .chunks(size)
+            .map(|chunk| {
+                let worker = scope.spawn(move || chunk.iter().map(|p| crate::import::read_tags(p)).collect::<Vec<_>>());
+                (chunk, worker)
+            })
+            .collect();
+        // One result per path, in order, even if a reader thread panicked:
+        // its files are refused rather than dropping out of step.
+        workers
+            .into_iter()
+            .flat_map(|(chunk, worker)| {
+                worker.join().unwrap_or_else(|_| {
+                    chunk
+                        .iter()
+                        .map(|p| Err(crate::import::ImportError::Unreadable {
+                            path: p.display().to_string(),
+                            reason: "reading its tags failed".to_owned(),
+                        }))
+                        .collect()
+                })
+            })
+            .collect()
+    })
+}
+
+/// A random id below `limit` that no row of `table` has.
+fn unused_id_in(conn: &Connection, rng: &mut Rng, table: &str, limit: u64) -> Result<String> {
+    let sql = format!("SELECT COUNT(*) FROM {table} WHERE ID = ?1");
+    for _ in 0..ID_ATTEMPTS {
+        let candidate = rng.numeric_id(limit);
+        let taken: i64 = conn.query_row(&sql, params![candidate], |r| r.get(0))?;
+        if taken == 0 {
+            return Ok(candidate);
+        }
+    }
+    Err(DbError::WriteRefused(format!(
+        "could not find an unused id for {table} in {ID_ATTEMPTS} attempts"
+    )))
+}
+
+/// The registry's own count of local updates, without the scan of every
+/// table that [`next_usn`] makes.
+fn registry_counter(conn: &Connection) -> Result<i64> {
+    Ok(conn.query_row(
+        "SELECT COALESCE(int_1, 0) FROM agentRegistry WHERE registry_id = 'localUpdateCount'",
+        [],
+        |r| r.get(0),
+    )?)
+}
+
+/// What importing one path of a batch came to.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ImportOutcome {
+    /// A new row, with its id.
+    Added(String),
+    /// The library already held the file, under this id.
+    Existing(String),
+    /// Not imported, and why.
+    Refused(String),
+}
+
+/// What one imported file puts in a `djmdContent` row.
+struct NewContent<'a> {
+    id: &'a str,
+    uuid: &'a str,
+    folder: &'a str,
+    file_name: &'a str,
+    path: &'a Path,
+    tags: &'a crate::import::TrackTags,
+    artist: &'a Option<String>,
+    album: &'a Option<String>,
+    genre: &'a Option<String>,
+    label: &'a Option<String>,
+    key: &'a Option<String>,
+    today: &'a str,
+    stamp: &'a str,
+    master_db: &'a Option<String>,
+    device: &'a Option<String>,
+    usn: i64,
+}
+
+/// The one `INSERT` an imported file goes through, whether it comes alone
+/// ([`Writer::import_file`]) or in a batch ([`Writer::import_files`]).
+fn insert_content(conn: &Connection, row: &NewContent<'_>) -> Result<()> {
+    let NewContent {
+        id, uuid, folder, file_name, path, tags, artist, album, genre, label, key,
+        today, stamp, master_db, device, usn,
+    } = row;
+// Every column rekordbox 7 fills on a file it imports itself, as on
+// the 645 rows it made on this machine [OBS] — the empty strings are
+// empty strings there, not NULLs. Left unset because their values are
+// [UNKNOWN]: `rb_file_id` (a counter of unknown ownership),
+// `ContentLink` (one constant on 643 of 645 rows), and the three
+// `*Updated` counters, which rekordbox sets as it goes.
+    conn.execute(
+        "INSERT INTO djmdContent
+                (ID, FolderPath, FileNameL, FileNameS, Title, Subtitle, ArtistID, AlbumID, GenreID, LabelID, KeyID,
+                 Length, BitRate, BitDepth, SampleRate, FileSize, FileType, ReleaseYear, TrackNo, DiscNo,
+                 Commnt, Rating, ColorID, DJPlayCount, Analysed, UUID,
+                 StockDate, DateCreated, MasterDBID, MasterSongID, DeviceID, HotCueAutoLoad,
+                 OrgFolderPath, ModifiedByRBM, DeliveryControl, DeliveryComment, Lyricist, Reserved1, ExtInfo,
+                 SamplerTrackInfo, SamplerPlayOffset, SamplerGain, VideoAssociate, LyricStatus, ServiceID,
+                 rb_data_status, rb_local_data_status, rb_local_deleted, rb_local_synced,
+                 usn, rb_local_usn, created_at, updated_at)
+             VALUES (?1, ?2, ?3, '', ?4, '', ?5, ?6, ?7, ?8, ?24,
+                     ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, 0,
+                     ?17, 0, 0, 0, NULL, ?18,
+                     ?19, ?19, ?20, ?1, ?21, 'on',
+                     '', '', '', '', '', '', 'null',
+                     0, 0, 0, 0, 0, 0,
+                     0, 0, 0, 0,
+                     NULL, ?22, ?23, ?23)",
+        params![
+            id,
+            folder,
+            file_name,
+            tags.title,
+            artist,
+            album,
+            genre,
+            label,
+            i64::from(tags.duration_sec),
+            i64::from(tags.bitrate),
+            i64::from(tags.bit_depth),
+            i64::from(tags.sample_rate),
+            i64::try_from(tags.file_size).unwrap_or(0),
+            crate::import::file_type(path),
+            i64::from(tags.year),
+            i64::from(tags.track_no),
+            tags.comment,
+            uuid,
+            today,
+            master_db,
+            device,
+            usn,
+            stamp,
+            key
+        ],
+    )?;
+    Ok(())
 }
 
 /// Finds a lookup row by name, or makes one, returning its id.
@@ -3116,36 +3397,40 @@ pub(crate) fn set_counter(conn: &Connection, usn: i64) -> Result<()> {
 
 /// Renumbers a playlist's `TrackNo` to 1..N in its current order.
 fn renumber(conn: &Connection, playlist: &str, stamp: &str) -> Result<i64> {
+    let start = next_usn(conn)?;
+    let mut next = start;
+    renumber_from(conn, playlist, stamp, &mut next)?;
+    Ok(if next > start { next - 1 } else { start })
+}
+
+/// [`renumber`] with the USNs handed out from `next`, which is left one past
+/// the last used. A caller renumbering several playlists reads the counter
+/// once and passes it through, instead of finding it again for every row.
+fn renumber_from(conn: &Connection, playlist: &str, stamp: &str, next: &mut i64) -> Result<()> {
     let mut stmt = conn.prepare(
-        "SELECT ID FROM djmdSongPlaylist WHERE PlaylistID = ?1 AND rb_local_deleted = 0
+        "SELECT ID, TrackNo FROM djmdSongPlaylist WHERE PlaylistID = ?1 AND rb_local_deleted = 0
          ORDER BY TrackNo",
     )?;
-    let ids: Vec<String> = stmt
-        .query_map(params![playlist], |r| r.get::<_, String>(0))?
+    let rows: Vec<(String, i64)> = stmt
+        .query_map(params![playlist], |r| Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?)))?
         .collect::<rusqlite::Result<_>>()?;
     drop(stmt);
 
-    let mut usn = next_usn(conn)?;
-    for (index, id) in ids.iter().enumerate() {
+    for (index, (id, current)) in rows.iter().enumerate() {
         let wanted = i64::try_from(index + 1).unwrap_or(i64::MAX);
         // Only touch rows whose number actually moves: an untouched row should
         // not get a new USN and look changed to the sync.
-        let current: i64 = conn.query_row(
-            "SELECT TrackNo FROM djmdSongPlaylist WHERE ID = ?1",
-            params![id],
-            |r| r.get(0),
-        )?;
-        if current == wanted {
+        if *current == wanted {
             continue;
         }
-        usn = next_usn(conn)?;
         conn.execute(
             "UPDATE djmdSongPlaylist SET TrackNo = ?1, rb_local_usn = ?2, updated_at = ?3
              WHERE ID = ?4",
-            params![wanted, usn, stamp, id],
+            params![wanted, *next, stamp, id],
         )?;
+        *next = next.checked_add(1).ok_or_else(|| DbError::WriteRefused("local update counter overflow".into()))?;
     }
-    Ok(usn)
+    Ok(())
 }
 
 /// `master.db` plus `-wal` gives `master.db-wal`, which is how SQLite names

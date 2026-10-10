@@ -2942,3 +2942,176 @@ fn folders_dropped_together_share_the_drop_index_like_rekordbox() {
     assert_eq!(names(&f), ["Old 2", "B", "A", "C", "Old 1"]);
     assert_eq!(f.children(&crate_folder)[0], old_2);
 }
+
+// ------------------------------------------------------------ batch writes
+
+/// What a track row says about its file and its artist, album, genre and key,
+/// by name rather than by the random ids two libraries would not share.
+fn described(f: &Fixture) -> Vec<Vec<Option<String>>> {
+    let mut stmt = f
+        .conn()
+        .prepare(
+            "SELECT c.FolderPath, c.FileNameL, c.Title, CAST(c.Length AS TEXT), CAST(c.BitRate AS TEXT),
+                    CAST(c.FileType AS TEXT), a.Name, al.Name, g.Name, k.ScaleName
+             FROM djmdContent c
+             LEFT JOIN djmdArtist a ON a.ID = c.ArtistID
+             LEFT JOIN djmdAlbum al ON al.ID = c.AlbumID
+             LEFT JOIN djmdGenre g ON g.ID = c.GenreID
+             LEFT JOIN djmdKey k ON k.ID = c.KeyID
+             WHERE c.rb_local_deleted = 0 AND c.FolderPath LIKE '%/imports/%'
+             ORDER BY c.FileNameL",
+        )
+        .unwrap();
+    stmt.query_map([], |r| (0..10).map(|i| r.get::<_, Option<String>>(i)).collect())
+        .unwrap()
+        .collect::<Result<_, _>>()
+        .unwrap()
+}
+
+#[test]
+fn a_batch_import_leaves_the_rows_that_importing_one_at_a_time_does() {
+    use lofty::prelude::ItemKey;
+    use rbl_db::write::ImportOutcome;
+
+    let root = tempfile::tempdir().unwrap();
+    let audio = root.path().join("imports");
+    std::fs::create_dir(&audio).unwrap();
+    let tags = |artist: &'static str, key: &'static str| {
+        vec![
+            (ItemKey::TrackTitle, "Title"), (ItemKey::TrackArtist, artist),
+            (ItemKey::AlbumTitle, "Album"), (ItemKey::Genre, "Techno"), (ItemKey::InitialKey, key),
+        ]
+    };
+    let shared_a = audio.join("a1.mp3");
+    let shared_b = audio.join("a2.mp3");
+    let shared_c = audio.join("a3.mp3");
+    let other = audio.join("b.mp3");
+    let plain = audio.join("plain.mp3");
+    let wav = audio.join("c.wav");
+    let notes = audio.join("notes.txt");
+    tagged_mp3(&shared_a, &tags("Same Artist", "2A"));
+    tagged_mp3(&shared_b, &tags("Same Artist", "2A"));
+    tagged_mp3(&shared_c, &tags("Same Artist", "2A"));
+    tagged_mp3(&other, &tags("Other Artist", "Fm"));
+    tagged_mp3(&plain, &[]);
+    write_wav(&wav, 1);
+    std::fs::write(&notes, b"not audio").unwrap();
+
+    // One at a time, as an import has always gone.
+    let mut one_by_one = fixture();
+    for file in [&shared_a, &shared_b, &shared_c, &other, &plain, &wav] {
+        one_by_one.writer.import_file(file).unwrap();
+    }
+    assert!(matches!(one_by_one.writer.import_file(&notes), Err(DbError::WriteRefused(_))));
+
+    // In one batch, with a file the library already holds, a file that is not
+    // audio, and one path listed twice.
+    let mut batched = fixture();
+    let held = batched.writer.import_file(&wav).unwrap();
+    let usn_before: i64 = batched.one(
+        "SELECT COALESCE(int_1, 0) FROM agentRegistry WHERE registry_id = 'localUpdateCount'",
+        &[],
+    );
+    let outcomes = batched
+        .writer
+        .import_files(&[
+            shared_a.clone(), shared_b, shared_c, other, plain, wav, notes, shared_a.clone(),
+        ])
+        .unwrap();
+    assert_eq!(outcomes.len(), 8);
+    let added: Vec<&String> = outcomes
+        .iter()
+        .filter_map(|o| if let ImportOutcome::Added(id) = o { Some(id) } else { None })
+        .collect();
+    assert_eq!(added.len(), 5, "five new files: the wav was held already");
+    assert_eq!(outcomes[5], ImportOutcome::Existing(held));
+    assert!(matches!(outcomes[6], ImportOutcome::Refused(_)));
+    assert_eq!(&outcomes[7], &ImportOutcome::Existing(added[0].clone()), "a path listed twice is one row");
+
+    assert_eq!(described(&batched), described(&one_by_one));
+    // Three files share an artist, an album, a genre and a key: one row each.
+    for (table, column, name) in [
+        ("djmdArtist", "Name", "Same Artist"), ("djmdAlbum", "Name", "Album"),
+        ("djmdGenre", "Name", "Techno"), ("djmdKey", "ScaleName", "2A"),
+    ] {
+        let sql = format!("SELECT COUNT(*) FROM {table} WHERE {column} = '{name}' AND rb_local_deleted = 0");
+        assert_eq!(batched.count(&sql), 1, "{table} {name}");
+    }
+
+    // Every new row has a USN of its own, above the counter's value before,
+    // and the counter has moved to the highest.
+    let mut usns: Vec<i64> = added
+        .iter()
+        .map(|id| batched.one("SELECT rb_local_usn FROM djmdContent WHERE ID = ?1", &[*id]))
+        .collect();
+    usns.sort_unstable();
+    usns.dedup();
+    assert_eq!(usns.len(), 5);
+    assert!(usns[0] > usn_before);
+    let counter: i64 = batched.one(
+        "SELECT int_1 FROM agentRegistry WHERE registry_id = 'localUpdateCount'",
+        &[],
+    );
+    assert!(counter >= *usns.last().unwrap());
+}
+
+#[test]
+fn removing_tracks_in_a_batch_leaves_what_removing_them_one_at_a_time_does() {
+    let removed: Vec<String> = [2, 3, 7].into_iter().map(track_id).collect();
+
+    let build = || {
+        let mut f = fixture();
+        let a = f.writer.create_playlist("A", ROOT).unwrap();
+        let b = f.writer.create_playlist("B", ROOT).unwrap();
+        let first: Vec<String> = (0..10).map(track_id).collect();
+        let second: Vec<String> = [7, 1, 3, 9, 5].into_iter().map(track_id).collect();
+        f.writer.add_tracks(&a, &first).unwrap();
+        f.writer.add_tracks(&b, &second).unwrap();
+        (f, a, b)
+    };
+
+    let (mut one_by_one, a1, b1) = build();
+    for track in &removed {
+        one_by_one.writer.delete_track(track).unwrap();
+    }
+
+    let (mut batched, a2, b2) = build();
+    let usn_before: i64 = batched.one(
+        "SELECT COALESCE(int_1, 0) FROM agentRegistry WHERE registry_id = 'localUpdateCount'",
+        &[],
+    );
+    let changed = batched.writer.delete_tracks(&removed).unwrap();
+    // Three tracks, and the memberships of 2 (one), 3 (two) and 7 (two).
+    assert_eq!(changed.rows, 3 + 5);
+
+    assert_eq!(batched.order(&a2), one_by_one.order(&a1));
+    assert_eq!(batched.order(&b2), one_by_one.order(&b1));
+    assert_eq!(batched.track_numbers(&a2), (1..=7).collect::<Vec<_>>());
+    assert_eq!(batched.track_numbers(&b2), (1..=3).collect::<Vec<_>>());
+    assert_eq!(
+        batched.count("SELECT COUNT(*) FROM djmdContent WHERE rb_local_deleted = 1"),
+        one_by_one.count("SELECT COUNT(*) FROM djmdContent WHERE rb_local_deleted = 1"),
+    );
+
+    // Every row it changed carries a USN above the counter's value before, and
+    // no two share one; the counter has moved to the highest.
+    let mut usns: Vec<i64> = {
+        let mut stmt = batched
+            .conn()
+            .prepare(
+                "SELECT rb_local_usn FROM djmdSongPlaylist WHERE rb_local_usn > ?1
+                 UNION ALL SELECT rb_local_usn FROM djmdContent WHERE rb_local_usn > ?1",
+            )
+            .unwrap();
+        stmt.query_map(params![usn_before], |r| r.get(0)).unwrap().collect::<Result<_, _>>().unwrap()
+    };
+    let rows = usns.len();
+    usns.sort_unstable();
+    usns.dedup();
+    assert_eq!(usns.len(), rows, "no two rows share a USN");
+    let counter: i64 = batched.one(
+        "SELECT int_1 FROM agentRegistry WHERE registry_id = 'localUpdateCount'",
+        &[],
+    );
+    assert_eq!(counter, *usns.last().unwrap());
+}

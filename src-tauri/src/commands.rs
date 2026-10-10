@@ -2914,34 +2914,25 @@ async fn import_files_then<R: tauri::Runtime>(
                 let mut skipped = Vec::new();
                 let mut tracks = Vec::new();
                 let mut existing = Vec::new();
-                for file in &files {
-                    // A file already in the library is not a failure: a drop
-                    // onto a playlist still wants that track in the playlist.
-                    if let Some(id) = writer.track_id_at(file)? {
-                        existing.push(crate::dto::ImportedTrackDto {
-                            id,
-                            title: file
-                                .file_name()
-                                .map(|name| name.to_string_lossy().into_owned())
-                                .unwrap_or_default(),
-                        });
-                        continue;
-                    }
-                    match writer.import_file(file) {
-                        Ok(id) => {
-                            imported += 1;
-                            tracks.push(crate::dto::ImportedTrackDto {
-                                id,
-                                title: file
-                                    .file_name()
-                                    .map(|name| name.to_string_lossy().into_owned())
-                                    .unwrap_or_default(),
-                            });
+                // One transaction for the whole batch; a file already in the
+                // library is not a failure, because a drop onto a playlist
+                // still wants that track in the playlist.
+                for (file, outcome) in files.iter().zip(writer.import_files(&files)?) {
+                    let title = file
+                        .file_name()
+                        .map(|name| name.to_string_lossy().into_owned())
+                        .unwrap_or_default();
+                    match outcome {
+                        rbl_db::write::ImportOutcome::Existing(id) => {
+                            existing.push(crate::dto::ImportedTrackDto { id, title });
                         }
-                        Err(rbl_db::DbError::WriteRefused(reason)) => {
+                        rbl_db::write::ImportOutcome::Added(id) => {
+                            imported += 1;
+                            tracks.push(crate::dto::ImportedTrackDto { id, title });
+                        }
+                        rbl_db::write::ImportOutcome::Refused(reason) => {
                             skipped.push(format!("{}: {reason}", file.display()));
                         }
-                        Err(other) => return Err(other),
                     }
                 }
                 Ok(ImportReportDto { imported, skipped, tracks, existing })
@@ -3866,10 +3857,7 @@ pub async fn remove_from_collection<R: tauri::Runtime>(
     tracks: Vec<String>,
 ) -> AppResult<u32> {
     permanent_edit(app, state, "remove_from_collection", Touched::Tracks, move |w| {
-        for track in &tracks {
-            w.delete_track(track)?;
-        }
-        Ok(())
+        w.delete_tracks(&tracks).map(|_| ())
     })
     .await
 }

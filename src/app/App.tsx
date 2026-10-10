@@ -106,8 +106,8 @@ const SHOW_MAIN_SUPPORT = true;
  * in and the longest a Stop waits.
  */
 const ADD_SLICE = 100;
-const IMPORT_SLICE = 25;
-const REMOVE_SLICE = 25;
+const IMPORT_SLICE = 100;
+const REMOVE_SLICE = 100;
 
 function ConnectedPreferences(props: Omit<React.ComponentProps<typeof Preferences>, "reduction" | "vu" | "peakLeft" | "peakRight">) {
   const master = useMasterDisplay();

@@ -582,23 +582,18 @@ fn artwork_without_the_library_sizes_is_copied_as_it_is_and_folders_hold_twenty(
 }
 
 #[test]
-fn failed_export_staging_preserves_previous_databases_and_audio() {
+fn a_track_that_cannot_be_read_is_left_out_and_the_rest_is_published() {
     let src = tempfile::tempdir().unwrap();
     let dest = tempfile::tempdir().unwrap();
     let mut tracks = vec![track(src.path(), 1, "First", "Artist"), track(src.path(), 2, "Second", "Artist")];
     let playlists = vec![SourcePlaylist { device_id: 0, device_only: false, parent_id: 0, folder: false, id: 1, name: "Set".into(), track_indices: vec![0, 1] }];
     export(dest.path(), &tracks, &playlists).unwrap();
-    let manifest = rbl_export::Manifest::load(dest.path()).unwrap();
-    let audio = dest.path().join(manifest.tracks[0].audio.trim_start_matches('/'));
-    let old_audio = std::fs::read(&audio).unwrap();
-    let database = dest.path().join("PIONEER/rekordbox/export.pdb");
-    let old_db = std::fs::read(&database).unwrap();
-    // The first track stages a replacement; reading the second must fail.
+    // The first track stages a replacement; reading the second fails.
     std::fs::write(&tracks[0].source_path, vec![9; 4096]).unwrap();
     tracks[1].source_path = src.path().to_path_buf();
-    assert!(export(dest.path(), &tracks, &playlists).is_err());
-    assert_eq!(std::fs::read(&audio).unwrap(), old_audio);
-    assert_eq!(std::fs::read(&database).unwrap(), old_db);
+    let report = export(dest.path(), &tracks, &playlists).unwrap();
+    assert_eq!(report.failed.len(), 1);
+    assert!(report.failed[0].starts_with("Second"), "{:?}", report.failed);
     assert!(!dest.path().join(".rbxport-publication").exists());
     assert!(verify(dest.path()).unwrap().is_ok());
 }
@@ -668,14 +663,12 @@ fn compatibility_conversion_reuses_outputs_updates_paths_and_can_be_disabled() {
         }
         assert_eq!(std::fs::read(&source).unwrap(), original);
     }
-    // Failed conversion cannot publish a partial replacement of an existing export.
-    let db = dest.path().join("PIONEER/rekordbox/export.pdb");
-    let before = std::fs::read(&db).unwrap();
+    // A track that cannot be converted is left out; the export still verifies.
     std::fs::write(&source, b"broken flac").unwrap();
-    assert!(export_with_options(dest.path(), &tracks, &playlists, &[],
-        &ExportOptions { compatibility: Some(CompatibilityFormat::Wav), ..Default::default() }, &mut |_| {}).is_err());
-    assert_eq!(std::fs::read(db).unwrap(), before);
-    assert!(previous_audio.unwrap().is_file());
+    let report = export_with_options(dest.path(), &tracks, &playlists, &[],
+        &ExportOptions { compatibility: Some(CompatibilityFormat::Wav), ..Default::default() }, &mut |_| {}).unwrap();
+    assert_eq!(report.failed.len(), 1, "{:?}", report.failed);
+    assert!(verify(dest.path()).unwrap().is_ok());
 }
 
 #[test]

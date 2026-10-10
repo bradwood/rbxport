@@ -871,7 +871,7 @@ fn tone_hz(left: &[f32], rate: u32) -> f32 {
 ///
 /// An underrun on a busy machine leaves output that is not the deck playing
 /// slower, and none of it moves the playhead. Running dry, the mixer holds
-/// the last frame and fades it down over its 88-frame ramp rather than
+/// the last frame and fades it down over its `FADE_FRAMES` ramp rather than
 /// cutting it, and the silence after that is not exact zeros but the decaying
 /// tail of the output stage, around 1e-5. Counting every frame that was not
 /// exactly 0.0 took both for the deck: a busy Linux runner read 2.58 seconds
@@ -879,7 +879,7 @@ fn tone_hz(left: &[f32], rate: u32) -> f32 {
 /// as much again. So only frames loud enough to be the tone count, less one
 /// fade for every gap the deck ran dry into.
 fn deck_frames(out: &[f32]) -> usize {
-    const FADE_FRAMES: usize = 88;
+    let fade = usize::from(rbl_deck::FADE_FRAMES);
     let audible: Vec<bool> = out.chunks_exact(2).map(|f| f[0].abs() > 1e-3 || f[1].abs() > 1e-3).collect();
     let frames = audible.iter().filter(|&&on| on).count();
     // Two quiet frames in a row is a gap. The tone itself is never below the
@@ -889,7 +889,7 @@ fn deck_frames(out: &[f32]) -> usize {
         .skip_while(|run| !run[0])
         .filter(|run| !run[0] && run.len() >= 2)
         .count();
-    frames.saturating_sub(gaps * FADE_FRAMES)
+    frames.saturating_sub(gaps * fade)
 }
 
 /// Frequency over the settled middle of a tone, left channel.
